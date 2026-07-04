@@ -10,6 +10,7 @@
     <h1>---DRAW---</h1>
     <canvas class="canvas">
     </canvas>
+    <button class="neonbtn">NEON</button>
     <button class="clrbtn">CLEAR</button>
     <button class="undobtn">UNDO</button>
     <button class="redobtn">REDO</button>
@@ -44,6 +45,7 @@
         let history = [];   
         let stroke = null;  
         let erase = false;
+        let neon = false;
         const dotsize = 0.0000000001;
 
         const btn = document.querySelector('.clrbtn');
@@ -79,6 +81,11 @@
             btn4.classList.toggle('btnclicked', erase);
         })
 
+        const btn5 = document.querySelector('.neonbtn', neon);
+        btn5.addEventListener('pointerdown', function() {
+            neontoggle();
+            btn5.classList.toggle('btnclicked');
+        })
 
 
         function start(e) {
@@ -101,7 +108,14 @@
                     points: []
                 };
             } 
-
+            else if(neon){
+                stroke = {
+                    tool: "neon",
+                    color: clr,
+                    size: size,
+                    points: []
+                };
+            } 
             else {
                 stroke = {
                     tool: "pen",
@@ -150,6 +164,12 @@
                 ctx.shadowColor = "transparent";
                 ctx.shadowBlur = 0;
             } 
+            else if(s.tool ==="neon"){
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = s.size;
+                ctx.shadowColor = s.color;
+                ctx.shadowBlur = Math.max(12, s.size * 4);
+            }
             else  {
                 ctx.strokeStyle = s.color;
                 ctx.lineWidth = s.size;
@@ -222,7 +242,9 @@
             erase = !erase;
         }
 
-
+        function neontoggle() {
+            neon = !neon;
+        }
 
 
         canvas.addEventListener("pointerdown", start);
