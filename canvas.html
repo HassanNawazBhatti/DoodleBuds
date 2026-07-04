@@ -10,6 +10,9 @@
     <h1>---DRAW---</h1>
     <canvas class="canvas">
     </canvas>
+    <button class="linebtn">LINE</button>
+    <button class="circlebtn">CIRCLE</button>
+    <button class="rectbtn">RECT</button>
     <button class="neonbtn">NEON</button>
     <button class="clrbtn">CLEAR</button>
     <button class="undobtn">UNDO</button>
@@ -43,9 +46,13 @@
         let prey = 0;
         let strokes = [];   
         let history = [];   
-        let stroke = null;  
+        let stroke = null;
         let erase = false;
         let neon = false;
+        let rect = false;
+        let circle = false;
+        let line = false;
+        let startx,starty = 0;
         const dotsize = 0.0000000001;
 
         const btn = document.querySelector('.clrbtn');
@@ -87,8 +94,28 @@
             btn5.classList.toggle('btnclicked');
         })
 
+        const btn6 = document.querySelector('.rectbtn', rect);
+        btn6.addEventListener('pointerdown', function() {
+            recttoggle();
+            btn6.classList.toggle('btnclicked');
+        })
+
+        const btn7 = document.querySelector('.circlebtn', circle);
+        btn7.addEventListener('pointerdown', function() {
+            circletoggle();
+            btn7.classList.toggle('btnclicked');
+        })
+
+        const btn8 = document.querySelector('.linebtn', line);
+        btn8.addEventListener('pointerdown', function() {
+            linetoggle();
+            btn8.classList.toggle('btnclicked');
+        })
 
         function start(e) {
+
+            startx = e.offsetX;
+            starty = e.offsetY;
 
             if (isdrawing) return;
 
@@ -138,6 +165,19 @@
             let currx = e.offsetX;
             let curry = e.offsetY;
 
+            if(rect){
+                drawrect(startx, starty, currx, curry);
+                return;
+            }
+            else if(circle){
+                drawcircle(startx,starty,currx,curry);
+                return;
+            }
+            else if(line){
+                drawshapedline(startx,starty,currx,curry);
+                return;
+            }
+            else
             drawline(prex, prey, currx, curry);
 
             prex = currx;
@@ -155,6 +195,79 @@
             ctx.stroke();
         }
 
+        function drawrect(x1,y1,x2,y2){
+            stroke.points = [];// as eacg time mouse moves, previous preview is replaced by current(first preview is dot)
+            redraw(strokes);
+            applyStrokeStyle(stroke);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y1);
+            ctx.lineTo(x2,y2);
+            ctx.lineTo(x1,y2);
+            ctx.lineTo(x1,y1);
+            ctx.stroke();
+            const seg1 = { x1:x1, y1:y1, x2:x2, y2:y1 };
+            const seg2 = { x1:x2, y1:y1, x2:x2, y2:y2 };
+            const seg3 = { x1:x2, y1:y2, x2:x1, y2:y2 };
+            const seg4 = { x1:x1, y1:y2, x2:x1, y2:y1 };
+            stroke.points.push(seg1,seg2,seg3,seg4);
+            
+            
+        }
+
+        function drawcircle(x1,y1,x2,y2){
+
+            stroke.points = [];
+        
+            redraw(strokes);
+        
+            applyStrokeStyle(stroke);
+        
+            // midpoint = centre
+            const cx = (x1 + x2) / 2;
+            const cy = (y1 + y2) / 2;
+        
+            // diameter = distance between mouse points
+            const radius = Math.sqrt(
+                (x2-x1)*(x2-x1) +
+                (y2-y1)*(y2-y1)
+            ) / 2;
+        
+            ctx.beginPath();
+            ctx.arc(cx, cy, radius, 0, Math.PI*2);
+            ctx.stroke();
+            
+            const pieces = 72;
+            
+            for(let i=0;i<pieces;i++){
+
+                const a1 = (i/pieces) * Math.PI*2;
+                const a2 = ((i+1)/pieces) * Math.PI*2;
+
+                stroke.points.push({
+
+                x1: cx + radius*Math.cos(a1),
+                y1: cy + radius*Math.sin(a1),
+
+                x2: cx + radius*Math.cos(a2),
+                y2: cy + radius*Math.sin(a2)
+                });
+            }
+        }
+        
+        function drawshapedline(x1,y1,x2,y2){
+            stroke.points = [];// as eacg time mouse moves, previous preview is replaced by current(first preview is dot)
+            redraw(strokes);
+            applyStrokeStyle(stroke);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+            const seg = {x1,y1,x2,y2};
+            stroke.points.push(seg);
+            
+            
+        }
 
         function applyStrokeStyle(s) {
             ctx.lineCap = "round";
@@ -244,6 +357,18 @@
 
         function neontoggle() {
             neon = !neon;
+        }
+
+        function recttoggle() {
+            rect = !rect;
+        }
+
+        function circletoggle() {
+            circle = !circle;
+        }
+
+        function linetoggle() {
+            line = !line;
         }
 
 
