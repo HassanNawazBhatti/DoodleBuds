@@ -25,13 +25,17 @@
                             <label for="login-email">
                                 <input type="email" placeholder="abcde@gmail.com" id="login-email" required>
                             </label>
+                            <span class="error" id="login-email-error"></span>
                         </div>
 
                         <div class="inputs">
                             <label for="login-password">
                                 <input type="password" id="login-password" placeholder="password" required>
                             </label>
+                            <span class="error" id="login-password-error"></span>
                         </div>
+
+                        <p class="error" id="login-message"></p>
 
                         <div>
                             <button id="login-btn" type="button">Login</button>
@@ -54,25 +58,31 @@
                             <label for="username">
                                 <input type="text" placeholder="Enter your username" id="username" required>
                             </label>
+                            <span class="error" id="username-error"></span>
                         </div>
 
                         <div class="inputs">
                             <label for="signup-email">
                                 <input type="email" placeholder="abcde@gmail.com" id="signup-email" required>
                             </label>
+                            <span class="error" id="signup-email-error"></span>
                         </div>
 
                         <div class="inputs">
                             <label for="signup-password">
                                 <input type="password" id="signup-password" placeholder="password" required>
                             </label>
+                            <span class="error" id="signup-password-error"></span>
                         </div>
 
                         <div class="inputs">
                             <label for="signup-confirm-password">
                                 <input type="password" id="signup-confirm-password" placeholder="confirm password" required>
                             </label>
+                            <span class="error" id="signup-confirm-password-error"></span>
                         </div>
+
+                        <p class="error" id="signup-message"></p>
 
                         <div>
                             <button id="signup-btn" type="button">Sign Up</button>
@@ -92,6 +102,22 @@
 
     </div>
 
+    <div class="modal" id="verify-modal">
+        <div class="modal-content">
+            <h2>Verify Email</h2>
+            <p>Enter the 6-digit code we emailed you</p>
+            <div class="inputs">
+                <label for="verify-code">
+                    <input type="text" id="verify-code" placeholder="6-digit code" maxlength="6">
+                </label>
+                <span class="error" id="verify-error"></span>
+            </div>
+            <div>
+                <button id="verify-btn" type="button">Verify</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const link = document.getElementById('link');
         const link2 = document.getElementById('link2');
@@ -99,6 +125,9 @@
         const sup = document.getElementById('signup-btn');
         const lin = document.getElementById('login-btn')
 
+        const modal = document.getElementById('verify-modal');
+        const verifyBtn = document.getElementById('verify-btn');
+        let pendingVerifyEmail = "";
 
         link.addEventListener('click', function(e) {
             e.preventDefault();
@@ -114,18 +143,25 @@
             setTimeout(() => slider.classList.remove('sliding'), 300);
         });
 
+        function clearErrors(ids) {
+            ids.forEach(id => document.getElementById(id).textContent = "");
+        }
+
         sup.addEventListener('click', ()=> {
+            clearErrors(['username-error', 'signup-email-error', 'signup-password-error', 'signup-confirm-password-error', 'signup-message']);
+
             const username = document.getElementById('username').value;
             const email = document.getElementById('signup-email').value;
             const password = document.getElementById('signup-password').value;
             const cpassword = document.getElementById('signup-confirm-password').value;
 
             if(password!=cpassword){
-                alert("password not matched!")
+                document.getElementById('signup-confirm-password-error').textContent = "Passwords don't match!";
                 return;
             }
 
-
+            sup.disabled = true;
+            sup.textContent = "Signing Up...";
 
             fetch('/register', {
                 method: 'POST',
@@ -139,15 +175,34 @@
                 })
                 
             })
-            .then(res => res.text())
+            .then(res => res.json())
             .then(data => {
-                alert(data);
+                sup.disabled = false;
+                sup.textContent = "Sign Up";
+
+                if (!data.success) {
+                    document.getElementById('signup-message').textContent = data.message;
+                    return;
+                }
+
+                pendingVerifyEmail = email;
+                modal.classList.add('show');
+            })
+            .catch(() => {  
+                sup.disabled = false;
+                sup.textContent = "Sign Up";
+                document.getElementById('signup-message').textContent = "Something went wrong!";
             })
         });
 
         lin.addEventListener('click', ()=> {
+            clearErrors(['login-email-error', 'login-password-error', 'login-message']);
+
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
+
+            lin.disabled = true;
+            lin.textContent = "Logging In...";
 
             fetch('/login', {
                 method: 'POST',
@@ -159,17 +214,61 @@
                     password: password
                 })
             })
-            .then(res => res.text())
+            .then(res => res.json())
             .then(data => {
-                if (data.endsWith(".html")){
-                    window.location.href = data;
+                lin.disabled = false;
+                lin.textContent = "Login";
+
+                if (data.success) {
+                    window.location.href = data.redirect;
                 }
-                else 
-                    alert(data)
+                else {
+                    document.getElementById('login-message').textContent = data.message;
+                }
+            })
+            .catch(() => {
+                lin.disabled = false;
+                lin.textContent = "Login";
+                document.getElementById('login-message').textContent = "Something went wrong!";
             })
         });
 
+        verifyBtn.addEventListener('click', ()=> {
+            document.getElementById('verify-error').textContent = "";
+            const code = document.getElementById('verify-code').value;
 
+            verifyBtn.disabled = true;
+            verifyBtn.textContent = "Verifying...";
+
+            fetch('/verify', {
+                method: 'POST',
+                headers: {
+                    'Content-Type' : 'application/json'
+                },
+                body: JSON.stringify({
+                    email: pendingVerifyEmail,
+                    code: code
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = "Verify";
+
+                if (!data.success) {
+                    document.getElementById('verify-error').textContent = data.message;
+                    return;
+                }
+
+                alert(data.message);
+                modal.classList.remove('show');
+            })
+            .catch(() => {
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = "Verify";
+                document.getElementById('verify-error').textContent = "Something went wrong!";
+            })
+        });
 
     </script>
 </body>
