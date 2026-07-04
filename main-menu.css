@@ -1,0 +1,158 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    height: 100vh;
+    overflow: hidden;
+}
+
+
+.container {
+    position: absolute;
+    width: 100%;
+    background-color: rgb(61, 60, 60);
+    height: 100%;
+}
+
+.header {
+    overflow: hidden;
+    display: flex;
+    flex-direction: row;
+    height: 10%;
+    border-bottom-left-radius: 100px;
+    border-bottom-right-radius: 100px;
+    box-shadow: 0 6px 10px  rgba(0, 0, 0, 1);
+    background-color: black;
+}
+
+
+h1, h2, p, label {
+    color: lightgray;
+    position: relative;
+    text-align: center;
+    font-family: cursive, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    text-shadow: 2px 2px 2px gray;
+}
+
+
+.logo {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    
+}
+
+.doodle-logo {
+    width: 50px;
+    height: 50px;
+    margin-right: 8px;
+    margin-left: 20%;
+}
+
+.title {
+    color: lightgray;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.view {
+    position: absolute;
+    top: 10%;
+    left: 0;
+    width: 100%;
+    height: 90%;
+    overflow: hidden;
+    background-color: rgb(61, 60, 60);
+}
+
+.grid {
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: 70%;
+    width: 50%;
+    border-radius: 40px;
+    box-shadow: 0 6px 10px rgba(0, 0, 0, 1);
+    gap: 50px;
+    padding: 40px;
+    background-color: black;
+}
+
+.option {
+    background-color: rgb(61, 60, 60);
+    border-radius: 30px;
+    margin: 8px;
+    box-shadow:  0 3px 15px rgb(61, 60, 60);
+}
+
+.option-hovered {
+    box-shadow: inset 0 3px 15px rgba(0, 0, 0, 1);
+    transform: scale(1.05);
+}
+
+.option-clicked {
+    box-shadow: inset 0 4px 17px rgba(0, 0, 0, 1);
+    transform: scale(0.95);
+}
+
+
+
+
+
+
+
+
+
+.footer {
+    position: absolute;
+    bottom: 0;
+    overflow: hidden;
+    width: 100%;
+    height: 8%;
+    border-top-left-radius: 100px;
+    border-top-right-radius: 100px;
+    box-shadow: 0 -2px 6px rgba(0, 0, 0, 1);
+    background-color: black;
+}
+
+.footer-text {
+    position: relative;
+    top: 35%;
+    left: 50%;
+    transform: translate(-50%, -30%);
+    font-size: 14px;
+}
+
+@media (max-width: 768px) {
+    
+    .title {
+        font-size: 20px;
+        scale: 0.9;   
+    }
+
+    .doodle-logo {
+            width: 40px;
+            height: 40px;
+            scale: 0.97;
+            margin-right: 0px;
+            margin-left: 20%;
+        }
+
+    .grid {
+        grid-template-columns: 1fr;
+        width: 70%;
+        height: 85%;
+        padding: 30px;
+    }
+    .option {
+        margin: 0px;
+    }
+    .footer-text {
+        font-size: 9px;
+    }}

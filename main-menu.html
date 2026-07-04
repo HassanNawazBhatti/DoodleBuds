@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DoodleBuds | Main Menu</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="main-menu.css">
+</head>
+
+<html>
+
+<body>
+    
+    <div class="container">
+        <header class="header">
+            <div class="logo"><img class="doodle-logo" src="doodlebuds.png" alt="DoodleBuds-logo"> <p class="title">DoodleBuds</p></div>
+        </header>
+
+        <div class="view">
+            <div class="grid">
+                <div class="option">
+
+                </div>
+
+                <div class="option">
+
+                </div>
+
+                <div class="option">
+                </div>
+
+                <div class="option">
+
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p class="footer-text">Developed by Hassan Nawaz. ©2026 DoodleBuds. All rights reserved. </p>
+        </div>
+    </div>
+
+
+
+    <script>
+        const option = document .querySelectorAll('.option');
+        option.forEach(opt => {
+            opt.addEventListener('mouseenter', () => {
+                opt.classList.add('option-hovered');
+            });
+            opt.addEventListener('mouseleave', () => {
+                opt.classList.remove('option-hovered');
+            });
+            opt.addEventListener('mousedown', () => {
+                opt.classList.add('option-clicked');
+            });
+            opt.addEventListener('mouseup', () => {
+                opt.classList.remove('option-clicked');
+            });
+        });
+    </script>
+</body>
+
+</html>
