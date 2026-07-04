@@ -50,8 +50,9 @@
         const sld = document.querySelector(".sizer");
 
 
-        canvas.width = window.innerWidth * 0.8;
-        canvas.height = window.innerHeight * 0.8;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
 
 
         const ERASER_MULTIPLIER = 3.5;
