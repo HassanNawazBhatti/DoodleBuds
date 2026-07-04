@@ -10,14 +10,29 @@
     <h1>---DRAW---</h1>
     <canvas class="canvas">
     </canvas>
-    <button class="linebtn">LINE</button>
-    <button class="circlebtn">CIRCLE</button>
-    <button class="rectbtn">RECT</button>
-    <button class="neonbtn">NEON</button>
+
+    <div class="tool-control">
+        <button class="toolbtn">Tool: <span class="current-tool">Pen</span></button>
+        <div class="tool-popup">
+            <button class="popup-item" data-tool="pen">Pen</button>
+            <button class="popup-item" data-tool="neon">Neon</button>
+            <button class="popup-item" data-tool="eraser">Eraser</button>
+        </div>
+    </div>
+
+    <div class="shape-control">
+        <button class="shapebtn">Shape: <span class="current-shape">Freehand</span></button>
+        <div class="shape-popup">
+            <button class="popup-item" data-shape="freehand">Freehand</button>
+            <button class="popup-item" data-shape="line">Line</button>
+            <button class="popup-item" data-shape="rectangle">Rectangle</button>
+            <button class="popup-item" data-shape="circle">Circle</button>
+        </div>
+    </div>
+
     <button class="clrbtn">CLEAR</button>
     <button class="undobtn">UNDO</button>
     <button class="redobtn">REDO</button>
-    <button class="erasebtn">ERASE</button>
     <label for="color-picker" class="colrlbl">Choose A Color =></label>
     <input type="color" class="colrbtn" name="color-picker" value="#000000">
     <label for="sizer" class="sldlbl">Size</label>
@@ -39,7 +54,7 @@
         canvas.height = window.innerHeight * 0.8;
 
 
-        const ERASER_MULTIPLIER = 1.5;
+        const ERASER_MULTIPLIER = 3.5;
 
         let isdrawing = false;
         let prex = 0;
@@ -47,13 +62,10 @@
         let strokes = [];   
         let history = [];   
         let stroke = null;
-        let erase = false;
-        let neon = false;
-        let rect = false;
-        let circle = false;
-        let line = false;
+        let currentTool = "pen";
+        let currentShape = "freehand";
         let startx,starty = 0;
-        const dotsize = 0.0000000001;
+        const dotsize = 0.001;
 
         const btn = document.querySelector('.clrbtn');
         btn.addEventListener('pointerdown', function() {
@@ -82,35 +94,61 @@
             btn3.classList.remove('btnclicked');
         })
 
-        const btn4 = document.querySelector('.erasebtn');
-        btn4.addEventListener('pointerdown', function() {
-            erasetoggle();
-            btn4.classList.toggle('btnclicked', erase);
+        // ---- Tool / Shape popup toolbar ----
+        const toolbtn = document.querySelector('.toolbtn');
+        const toolPopup = document.querySelector('.tool-popup');
+        const shapebtn = document.querySelector('.shapebtn');
+        const shapePopup = document.querySelector('.shape-popup');
+        const currentToolLabel = document.querySelector('.current-tool');
+        const currentShapeLabel = document.querySelector('.current-shape');
+
+        toolbtn.addEventListener('pointerdown', function(e) {
+            e.stopPropagation();
+            shapePopup.classList.remove('open');
+            toolPopup.classList.toggle('open');
         })
 
-        const btn5 = document.querySelector('.neonbtn', neon);
-        btn5.addEventListener('pointerdown', function() {
-            neontoggle();
-            btn5.classList.toggle('btnclicked');
+        shapebtn.addEventListener('pointerdown', function(e) {
+            e.stopPropagation();
+            toolPopup.classList.remove('open');
+            shapePopup.classList.toggle('open');
         })
 
-        const btn6 = document.querySelector('.rectbtn', rect);
-        btn6.addEventListener('pointerdown', function() {
-            recttoggle();
-            btn6.classList.toggle('btnclicked');
+        toolPopup.querySelectorAll('.popup-item').forEach(function(item) {
+            item.addEventListener('pointerdown', function(e) {
+                e.stopPropagation();
+                selectTool(item.dataset.tool);
+                toolPopup.classList.remove('open');
+            })
         })
 
-        const btn7 = document.querySelector('.circlebtn', circle);
-        btn7.addEventListener('pointerdown', function() {
-            circletoggle();
-            btn7.classList.toggle('btnclicked');
+        shapePopup.querySelectorAll('.popup-item').forEach(function(item) {
+            item.addEventListener('pointerdown', function(e) {
+                e.stopPropagation();
+                selectShape(item.dataset.shape);
+                shapePopup.classList.remove('open');
+            })
         })
 
-        const btn8 = document.querySelector('.linebtn', line);
-        btn8.addEventListener('pointerdown', function() {
-            linetoggle();
-            btn8.classList.toggle('btnclicked');
+        document.addEventListener('pointerdown', function() {
+            toolPopup.classList.remove('open');
+            shapePopup.classList.remove('open');
         })
+
+        function selectTool(tool) {
+            currentTool = tool;
+            currentToolLabel.textContent = tool.charAt(0).toUpperCase() + tool.slice(1);
+        }
+
+        function selectShape(shape) {
+            currentShape = shape;
+            currentShapeLabel.textContent = shape.charAt(0).toUpperCase() + shape.slice(1);
+        }
+
+        function getEffectiveShape() {
+            if (currentTool === "eraser") return "freehand";
+            return currentShape;
+        }
 
         function start(e) {
 
@@ -127,7 +165,7 @@
             // makes drawing smooth and continuous on touch devices.
             canvas.setPointerCapture(e.pointerId);
 
-            if (erase) {
+            if (currentTool === "eraser") {
                 stroke = {
                     tool: "eraser",
                     color: "white",
@@ -135,7 +173,7 @@
                     points: []
                 };
             } 
-            else if(neon){
+            else if(currentTool === "neon"){
                 stroke = {
                     tool: "neon",
                     color: clr,
@@ -165,15 +203,17 @@
             let currx = e.offsetX;
             let curry = e.offsetY;
 
-            if(rect){
+            const shape = getEffectiveShape();
+
+            if(shape === "rectangle"){
                 drawrect(startx, starty, currx, curry);
                 return;
             }
-            else if(circle){
+            else if(shape === "circle"){
                 drawcircle(startx,starty,currx,curry);
                 return;
             }
-            else if(line){
+            else if(shape === "line"){
                 drawshapedline(startx,starty,currx,curry);
                 return;
             }
@@ -349,26 +389,6 @@
             history = [];
             stroke = null;
             isdrawing = false;
-        }
-
-        function erasetoggle() {
-            erase = !erase;
-        }
-
-        function neontoggle() {
-            neon = !neon;
-        }
-
-        function recttoggle() {
-            rect = !rect;
-        }
-
-        function circletoggle() {
-            circle = !circle;
-        }
-
-        function linetoggle() {
-            line = !line;
         }
 
 
