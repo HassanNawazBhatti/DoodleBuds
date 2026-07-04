@@ -82,6 +82,18 @@ h1{
     
 }
 
+.neonbtn{
+    background-color: white;
+    position: absolute;
+    width: 4rem;
+    height: 1.5rem;
+    border-radius: 30px;
+    left: 30%;
+    transform: translate(-50%);
+    top: 87%;
+    -webkit-text-stroke-width: 1px;
+    
+}
 
 .btnclicked{
     transform: translate(-50%) scale(0.88);
