@@ -226,7 +226,7 @@ h1{
 
     .canvas{
         width: 90%;
-        height: 74%;
+        height: 78%;
         top: 42%;
     }
 
@@ -240,7 +240,7 @@ h1{
     .clrbtn,
     .undobtn,
     .redobtn{
-        width: 3.4rem;
+        width: 3.5rem;
         height: 1.6rem;
         font-size: 11px;
     }
@@ -253,12 +253,12 @@ h1{
         left: 34%;
     }
 
-    .clrbtn{ left: 50%; }
-    .undobtn{ left: 58%; }
-    .redobtn{ left: 66%; }
+    .clrbtn{ left: 48%; }
+    .undobtn{ left: 56%; }
+    .redobtn{ left: 64%; }
 
     .colrlbl{
-        left: 80%;
+        left: 82%;
         font-size: 12px;
     }
 
@@ -268,7 +268,8 @@ h1{
     }
 
     .sldlbl{
-        left: 96%;
+        top: 29%;
+        left: 97%;
         font-size: 12px;
     }
 
@@ -287,7 +288,7 @@ h1{
 
     .canvas{
         width: 94%;
-        height: 62%;
+        height: 66%;
         top: 38%;
         border-radius: 12px;
     }
@@ -322,9 +323,9 @@ h1{
         top: 78%;
     }
 
-    .clrbtn{ left: 62%; top: 78%; }
-    .undobtn{ left: 78%; top: 78%; }
-    .redobtn{ left: 94%; top: 78%; }
+    .clrbtn{ left: 60%; top: 78%; }
+    .undobtn{ left: 76%; top: 78%; }
+    .redobtn{ left: 92%; top: 78%; }
 
     .colrlbl{
         left: 22%;
@@ -340,13 +341,13 @@ h1{
     }
 
     .sldlbl{
-        left: 68%;
+        left: 63%;
         top: 87%;
         font-size: 11px;
     }
 
     .sizer{
-        left: 88%;
+        left: 82%;
         top: 87%;
         writing-mode: horizontal-tb;
         transform: translateX(-50%);
@@ -355,11 +356,11 @@ h1{
     }
 
     .footer{
-        height: 8%;
+        height: 7%;
     }
 
     .footer-text{
-        font-size: 10px;
+        font-size: 11px;
         top: 30%;
     }
 }
