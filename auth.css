@@ -22,6 +22,8 @@ h1, h2, p, label {
     text-align: center;
     font-family: cursive, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     text-shadow: 2px 2px 2px gray;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .title {
@@ -46,7 +48,10 @@ h1, h2, p, label {
     left: 0;
     width: 100%;
     height: 75%;
-    overflow: hidden;
+    /* overflow-x stays hidden so the slide animation still hides the other panel,
+       overflow-y is now auto so content taller than the view scrolls instead of getting clipped */
+    overflow-x: hidden;
+    overflow-y: auto;
     background-color: rgb(31, 30, 30);
     border-top-left-radius: 100px;
     border-top-right-radius: 100px;
@@ -55,13 +60,14 @@ h1, h2, p, label {
 .slider {
     display: flex;
     width: 200%;
-    height: 100%;
+    min-height: 100%;
     transition: transform 0.3s ease-in-out;
     background-color: rgb(31, 30, 30);
 }
 
 .auth {
     padding-top: 24px;
+    padding-bottom: 24px;
     width: 100vw;
     background-color: rgb(31, 30, 30);
 }
@@ -75,14 +81,15 @@ input {
     left: 50%;
     transform: translateX(-50%);
     width: 40%;
+    min-width: 180px;
     min-height: 30px;
     padding: 8px;
-    margin: 0;
     border-radius: 15px;
     border: none;
     background-color: rgb(185, 184, 184);
     color: black;
     font-weight: bold;
+    max-width: 90%;
 }
 
 ::placeholder {
@@ -95,14 +102,16 @@ button {
     left: 50%;
     transform: translateX(-50%);
     width: 30%;
-    min-height: 44px;
-    margin: 5px 0;
+    min-width: 140px;
+    min-height: 40px;
+    margin: 3px 0;
     border-radius: 15px;
     border: none;
     background-color: rgb(99, 98, 98);;
     font-size: 18px;
     font-weight: bold;
     cursor: pointer;
+    max-width: 90%;
 }
 
 button:disabled {
@@ -129,7 +138,9 @@ button:disabled {
 
 .goto {
     margin-top: 10px;
+    margin-bottom: 45px;
     font-size: 18px;
+    padding: 0 10px;
 }
 
 #link, #link2 {
@@ -153,11 +164,15 @@ button:disabled {
     left: 50%;
     transform: translateX(-50%);
     width: 40%;
+    min-width: 180px;
+    max-width: 90%;
     color: rgb(255, 120, 120);
     text-shadow: none;
     font-size: 13px;
     text-align: center;
     min-height: 16px;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .modal {
@@ -170,6 +185,7 @@ button:disabled {
     background: rgba(0, 0, 0, 0.7);
     align-items: center;
     justify-content: center;
+    overflow-y: auto;
 }
 
 .modal.show {
@@ -182,6 +198,28 @@ button:disabled {
     border-radius: 20px;
     width: 90%;
     max-width: 350px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.footer {
+    position: absolute;
+    bottom: 0;
+    overflow: hidden;
+    width: 100%;
+    height: 8%;
+    border-top-left-radius: 100px;
+    border-top-right-radius: 100px;
+    box-shadow: 0 -2px 6px rgba(0, 0, 0, 1);
+    background-color: black;
+}
+
+.footer-text {
+    position: relative;
+    top: 35%;
+    left: 50%;
+    transform: translate(-50%, -30%);
+    font-size: 14px;
 }
 
 @media (max-width: 768px) {
@@ -204,5 +242,48 @@ button:disabled {
 
     .error {
         width: 80%;
+    }
+    .footer-text {
+        font-size: 9px;
+    }
+}
+
+/* very small phones / narrow windows - give text and inputs a little more breathing room */
+@media (max-width: 420px) {
+    .title {
+        width: 90%;
+        padding: 12px;
+    }
+
+    h1 {
+        font-size: 24px;
+    }
+
+    input, button {
+        width: 90%;
+        min-width: 0;
+    }
+
+    .error {
+        width: 90%;
+        min-width: 0;
+    }
+
+    .modal-content {
+        padding: 20px;
+    }
+}
+
+/* short screens (landscape phones, small laptop windows) - the view scrolls
+   internally (see .view overflow-y above), this just tightens the top title
+   so more room is left for the form itself */
+@media (max-height: 500px) {
+    .title {
+        height: auto;
+        padding: 10px 20px;
+    }
+
+    .auth {
+        padding-top: 12px;
     }
 }
