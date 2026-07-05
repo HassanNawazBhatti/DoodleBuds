@@ -95,12 +95,17 @@
 
                         <p class="goto">Already have an account? <a id="link2" href="#">Login</a></p>
                     </form>
+                    
                 </div>
-
+                
             </div>
-        </div>
 
+        </div>
+        
     </div>
+    <div class="footer">
+                    <p class="footer-text">Developed by Hassan Nawaz. ©2026 DoodleBuds. All rights reserved. </p>
+                </div>
 
     <div class="modal" id="verify-modal">
         <div class="modal-content">
@@ -115,8 +120,13 @@
             <div>
                 <button id="verify-btn" type="button">Verify</button>
             </div>
+            <div>
+                <button id="resend-btn" type="button" class="google-btn"><p style="color: black;">Resend Code</p></button>
+            </div>
         </div>
+        
     </div>
+
 
     <script>
         const link = document.getElementById('link');
@@ -127,6 +137,7 @@
 
         const modal = document.getElementById('verify-modal');
         const verifyBtn = document.getElementById('verify-btn');
+        const resendBtn = document.getElementById('resend-btn');
         let pendingVerifyEmail = "";
 
         link.addEventListener('click', function(e) {
@@ -186,9 +197,10 @@
                 }
 
                 pendingVerifyEmail = email;
+                document.getElementById('verify-error').textContent = "";
                 modal.classList.add('show');
             })
-            .catch(() => {  
+            .catch(() => {
                 sup.disabled = false;
                 sup.textContent = "Sign Up";
                 document.getElementById('signup-message').textContent = "Something went wrong!";
@@ -260,12 +272,39 @@
                     return;
                 }
 
-                alert(data.message);
-                modal.classList.remove('show');
+                // verified! log straight into main-menu, no login step needed
+                window.location.href = data.redirect;
             })
             .catch(() => {
                 verifyBtn.disabled = false;
                 verifyBtn.textContent = "Verify";
+                document.getElementById('verify-error').textContent = "Something went wrong!";
+            })
+        });
+
+        resendBtn.addEventListener('click', ()=> {
+            document.getElementById('verify-error').textContent = "";
+            resendBtn.disabled = true;
+            resendBtn.textContent = "Resending...";
+
+            fetch('/resend-code', {
+                method: 'POST',
+                headers: {
+                    'Content-Type' : 'application/json'
+                },
+                body: JSON.stringify({
+                    email: pendingVerifyEmail
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                resendBtn.disabled = false;
+                resendBtn.textContent = "Resend Code";
+                document.getElementById('verify-error').textContent = data.message;
+            })
+            .catch(() => {
+                resendBtn.disabled = false;
+                resendBtn.textContent = "Resend Code";
                 document.getElementById('verify-error').textContent = "Something went wrong!";
             })
         });
