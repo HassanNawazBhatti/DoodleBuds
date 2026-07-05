@@ -22,14 +22,14 @@ let query = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE,
     email TEXT UNIQUE,
-    password TEXT,
-    verified INTEGER DEFAULT 0,
-    verify_code TEXT,
-    verify_expires INTEGER
+    password TEXT
     )`;
 
 db.run(query)
 
+// signups that haven't been verified yet live here in memory,
+// keyed by email. Nothing goes into SQLite until verification succeeds.
+let pendingSignups = {};
 
 const port = 3000;
 
@@ -59,13 +59,25 @@ server.listen(port, ()=> {
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'haxan0921@gmail.com',
-        pass: 'iowd pfhf vuyv aylt'
+        user: 'hax******@gmail.com',
+        pass: 'your-app-key'
     }
 });
 
 function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function sendVerificationCode(email, code) {
+    transporter.sendMail({
+        from: 'haxa****1@gmail.com',
+        to: email,
+        subject: 'DoodleBuds Verification Code',
+        text: `Your verification code is ${code}. It expires in 10 minutes.
+        Verify Your Account, and Start Doodlifying Your Day.`
+    }, function(err) {
+        if (err) console.log("Email error:", err);
+    });
 }
 
 app.post('/register',function(req, res) {
@@ -84,28 +96,46 @@ app.post('/register',function(req, res) {
         return res.json({ success: false, message: "Password must be at least 6 characters!", redirect: null });
     }
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
-
-    let query = `INSERT INTO users (username, email, password, verify_code, verify_expires) VALUES (?,?,?,?,?)`
-    db.run(query, [username, email, password, code, expires], function (err) {
+    let query = `SELECT * FROM users WHERE email = ? OR username = ?`;
+    db.get(query, [email, username], function(err, existingUser) {
         if (err) {
-            return res.json({ success: false, message: err.message, redirect: null });
+            return res.json({ success: false, message: "Database Error!!", redirect: null });
+        }
+        if (existingUser) {
+            return res.json({ success: false, message: "Username or email already registered. Please login.", redirect: null });
         }
 
-        transporter.sendMail({
-            from: 'haxan0921@gmail.com',
-            to: email,
-            subject: 'DoodleBuds Verification Code',
-            text: `Your verification code is ${code}. It expires in 10 minutes.`
-        }, function(err) {
-            if (err) console.log("Email error:", err);
-        });
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+        // already has an unverified signup in progress -> just refresh the code
+        // and pop the verification UI again instead of erroring out
+        pendingSignups[email] = { username, email, password, code, expires };
+
+        sendVerificationCode(email, code);
 
         res.json({ success: true, message: "Signup successful! Check your email for the verification code.", redirect: null });
     })
 
 }); 
+
+app.post('/resend-code', function(req, res) {
+    const { email } = req.body;
+    const pending = pendingSignups[email];
+
+    if (!pending) {
+        return res.json({ success: false, message: "No pending signup found. Please sign up again.", redirect: null });
+    }
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = Date.now() + 10 * 60 * 1000;
+    pending.code = code;
+    pending.expires = expires;
+
+    sendVerificationCode(email, code);
+
+    res.json({ success: true, message: "Verification code resent!", redirect: null });
+});
 
 app.post('/verify', function(req, res) {
     const { email, code } = req.body;
@@ -114,31 +144,32 @@ app.post('/verify', function(req, res) {
         return res.json({ success: false, message: "All fields are required!", redirect: null });
     }
 
-    let query = `SELECT * FROM users WHERE email = ?`;
-    db.get(query, [email], function(err, user){
-        if (err){
-            return res.json({ success: false, message: "Database Error!!", redirect: null })
-        }
-        if (!user){
-            return res.json({ success: false, message: "Email Not Found!!", redirect: null })
-        }
-        if (user.verified){
-            return res.json({ success: false, message: "Account already verified!", redirect: null })
-        }
-        if (Date.now() > user.verify_expires){
-            return res.json({ success: false, message: "Code expired! Please sign up again.", redirect: null })
-        }
-        if (user.verify_code !== code){
-            return res.json({ success: false, message: "Invalid code!", redirect: null })
+    const pending = pendingSignups[email];
+
+    if (!pending) {
+        return res.json({ success: false, message: "No pending signup found. Please sign up again.", redirect: null });
+    }
+    if (Date.now() > pending.expires) {
+        delete pendingSignups[email];
+        return res.json({ success: false, message: "Code expired! Please sign up again.", redirect: null });
+    }
+    if (pending.code !== code) {
+        return res.json({ success: false, message: "Invalid code!", redirect: null });
+    }
+
+    let query = `INSERT INTO users (username, email, password) VALUES (?,?,?)`;
+    db.run(query, [pending.username, pending.email, pending.password], function(err) {
+        if (err) {
+            return res.json({ success: false, message: "User already exists or error occurred", redirect: null });
         }
 
-        db.run(`UPDATE users SET verified = 1 WHERE email = ?`, [email], function(err){
-            if (err){
-                return res.json({ success: false, message: "Database Error!!", redirect: null })
-            }
-            res.json({ success: true, message: "Verified! You can now login.", redirect: null })
-        });
-    })
+        delete pendingSignups[email];
+
+        // log the user in immediately, no need to visit /login after verifying
+        req.session.user = { id: this.lastID, username: pending.username, email: pending.email };
+
+        res.json({ success: true, message: "Verified!", redirect: "/main-menu.html" });
+    });
 });
 
 
@@ -160,11 +191,7 @@ app.post('/login', function(req,res) {
         if (user.password !== password){
             return res.json({ success: false, message: "Invalid Password!!", redirect: null })
         }
-        if (!user.verified){
-            return res.json({ success: false, message: "Please verify your email before logging in!", redirect: null })
-        }
 
-        // save the logged in user's data in the session
         req.session.user = { id: user.id, username: user.username, email: user.email };
 
         res.json({ success: true, message: "Login successful!", redirect: "/main-menu.html" })
