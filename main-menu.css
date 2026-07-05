@@ -56,6 +56,16 @@ h1, h2, p, label {
     color: lightgray;
     font-size: 24px;
     font-weight: bold;
+    left: 25%;
+}
+
+.greet{
+    left: 40%;
+    transform: translate(-50%);
+    text-align: center;
+    align-content: center;
+    color: lightgray;
+    font-size: 17px;
 }
 
 .view {
@@ -69,6 +79,7 @@ h1, h2, p, label {
 }
 
 .grid {
+    user-select: none;
     top: 45%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -85,10 +96,14 @@ h1, h2, p, label {
 }
 
 .option {
+    color: rgb(201, 201, 201);
+    font-size: 20px;
     background-color: rgb(61, 60, 60);
     border-radius: 30px;
     margin: 8px;
     box-shadow:  0 3px 15px rgb(61, 60, 60);
+    text-align: center;
+    align-content: center;
 }
 
 .option-hovered {
@@ -100,12 +115,6 @@ h1, h2, p, label {
     box-shadow: inset 0 4px 17px rgba(0, 0, 0, 1);
     transform: scale(0.95);
 }
-
-
-
-
-
-
 
 
 
@@ -132,8 +141,53 @@ h1, h2, p, label {
 @media (max-width: 768px) {
     
     .title {
-        font-size: 20px;
-        scale: 0.9;   
+        font-size: 18px;
+        scale: 0.8;
+        left:2%;
+        
+    }
+
+    .greet {
+        font-size: 12px;
+        scale: 0.9;
+        left: 30%
+        
+    }
+
+    .doodle-logo {
+            width: 40px;
+            height: 40px;
+            scale: 0.97;
+            margin-right: 0px;
+            margin-left: 20%;
+        }
+
+    .grid {
+        grid-template-columns: 1fr;
+        width: 70%;
+        height: 85%;
+        padding: 30px;
+    }
+    .option {
+        margin: 0px;
+    }
+    .footer-text {
+        font-size: 9px;
+    }}
+
+@media (max-width: 480px) {
+    
+    .title {
+        font-size: 18px;
+        scale: 0.8;
+        
+    }
+
+    .greet {
+        font-size: 12px;
+        scale: 0.8;
+        left: 24%
+        
     }
 
     .doodle-logo {
