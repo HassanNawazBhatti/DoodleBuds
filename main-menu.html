@@ -10,27 +10,28 @@
 <html>
 
 <body>
-    
+    <!-- <img class="doodle-logo" src="doodlebuds.png" alt="DoodleBuds-logo"> -->
     <div class="container">
         <header class="header">
-            <div class="logo"><img class="doodle-logo" src="doodlebuds.png" alt="DoodleBuds-logo"> <p class="title">DoodleBuds</p></div>
+            <div class="logo"> <p class="title">DoodleBuds</p></div><p class="greet">Welcome, (USER)!!</p>
         </header>
 
         <div class="view">
             <div class="grid">
-                <div class="option">
-
+                <div class="option" id="crtrm">
+                    Create Room
                 </div>
 
-                <div class="option">
-
+                <div class="option" id="joinrm">
+                    Join Room
                 </div>
 
-                <div class="option">
+                <div class="option" id="solo">
+                    Draw Solo
                 </div>
 
-                <div class="option">
-
+                <div class="option" id="lgout">
+                    Logout Game
                 </div>
             </div>
         </div>
@@ -43,7 +44,17 @@
 
 
     <script>
-        const option = document .querySelectorAll('.option');
+        fetch('/session-user', {
+            method: 'GET',
+            headers: {
+                'Content-Type' : 'application/json'
+            }
+        }).then(res=>res.json())
+        .then(data=>{
+            const username = data.user.username;
+            document.querySelector('.greet').textContent = "Welcome, "+username.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')+"!!";
+        })
+        const option = document.querySelectorAll('.option');
         option.forEach(opt => {
             opt.addEventListener('mouseenter', () => {
                 opt.classList.add('option-hovered');
@@ -55,6 +66,7 @@
                 opt.classList.add('option-clicked');
             });
             opt.addEventListener('mouseup', () => {
+                
                 opt.classList.remove('option-clicked');
             });
         });
