@@ -43,6 +43,12 @@ app.get('/main-menu.html', function(req, res, next) {
     }
     next();
 });
+app.get('/canvas.html', function(req, res, next) {
+    if (!req.session.user) {
+        return res.redirect('/');
+    }
+    next();
+});
 
 app.use(express.static(path.join(__dirname)));
 
@@ -59,7 +65,7 @@ server.listen(port, ()=> {
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'hax******@gmail.com',
+        user: 'hax****21@gmail.com',
         pass: 'your-app-key'
     }
 });
@@ -216,3 +222,7 @@ app.post('/logout', function(req, res) {
         res.json({ success: true, message: "Logged out", redirect: "/" });
     });
 });
+
+app.post('/solo', function(req, res) {
+    res.json({ success: true, message: "Starting solo game", redirect: "/canvas.html" });
+})
