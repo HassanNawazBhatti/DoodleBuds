@@ -66,8 +66,73 @@
                 opt.classList.add('option-clicked');
             });
             opt.addEventListener('mouseup', () => {
-                
                 opt.classList.remove('option-clicked');
+
+                if(event.target.id==='lgout'){
+                    fetch('/logout', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json'
+                          }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                          if (data.success) {
+                            // Redirect to the URL provided by the backend ("/")
+                            window.location.href = data.redirect;
+                          } else {
+                            console.error('Logout failed:', data.message);
+                            alert(data.message);
+                          }
+                        })
+                        .catch(error => {
+                          console.error('Network error during logout:', error);
+                        });
+                }
+
+                if(event.target.id==='solo'){
+                    fetch('/solo', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json'
+                          }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                          if (data.success) {
+                            // Redirect to the URL provided by the backend ("/")
+                            window.location.href = data.redirect;
+                          } else {
+                            console.error('Solo game failed:', data.message);
+                            alert(data.message);
+                          }
+                        })
+                        .catch(error => {
+                          console.error('Network error:', error);
+                        });
+                }
+
+                if(event.target.id==='crtrm'){
+                    fetch('/create-room', {
+                          method: 'POST',
+                          headers: {
+                            'Content-Type': 'application/json'
+                          }
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                          if (data.success) {
+                            // Redirect to the URL provided by the backend ("/")
+                            window.location.href = data.redirect;
+                          } else {
+                            console.error('Solo game failed:', data.message);
+                            alert(data.message);
+                          }
+                        })
+                        .catch(error => {
+                          console.error('Network error:', error);
+                        });
+                }
             });
         });
     </script>
