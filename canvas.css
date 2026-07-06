@@ -18,6 +18,26 @@ h1{
     transform: translate(-50%);
 }
 
+.roomCode{
+    scale: 0.65;
+    position: absolute;
+    color: white;
+    width: fit-content;
+    height: fit-content;
+    left: 20%;
+    transform: translate(-50%);
+}
+
+.roomCreator{
+    scale: 0.65;
+    position: absolute;
+    color: white;
+    width: fit-content;
+    height: fit-content;
+    left: 70%;
+    transform: translate(-50%);
+}
+
 .canvas{
     touch-action: none;
     border-radius: 20px;
@@ -281,6 +301,12 @@ h1{
     .footer-text{
         font-size: 12px;
     }
+    .roomCode{
+        scale: 0.3;
+    }
+    .roomCreator{
+        scale: 0.3;
+    }
 }
 
 /* ---- Responsive: mobile ---- */
@@ -362,5 +388,11 @@ h1{
     .footer-text{
         font-size: 11px;
         top: 30%;
+    }
+    .roomCode{
+        scale: 0.4;
+    }
+    .roomCreator{
+        scale: 0.4;
     }
 }
