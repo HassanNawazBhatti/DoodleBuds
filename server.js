@@ -32,6 +32,7 @@ db.run(query)
 let pendingSignups = {};
 
 const port = 3000;
+let rooms = new Map();
 
 const server = http.createServer(app);
 
@@ -66,7 +67,7 @@ const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
         user: 'hax****21@gmail.com',
-        pass: 'your-app-key'
+        pass: 'your-api-key'
     }
 });
 
@@ -84,6 +85,27 @@ function sendVerificationCode(email, code) {
     }, function(err) {
         if (err) console.log("Email error:", err);
     });
+}
+
+function generateRoomCode() {
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const digits = "0123456789";
+
+    let code = "";
+
+    for (let i = 0; i < 2; i++) {
+        code += letters[Math.floor(Math.random() * letters.length)];
+    }
+
+    for (let i = 0; i < 2; i++) {
+        code += digits[Math.floor(Math.random() * digits.length)];
+    }
+
+    if (rooms.has(code)) {
+        return generateRoomCode();
+    }
+
+    return code;
 }
 
 app.post('/register',function(req, res) {
@@ -198,7 +220,7 @@ app.post('/login', function(req,res) {
             return res.json({ success: false, message: "Invalid Password!!", redirect: null })
         }
 
-        req.session.user = { id: user.id, username: user.username, email: user.email };
+        req.session.user = { id: user.id, username: user.username, email: user.email, inRoom: false, roomCode: null };
 
         res.json({ success: true, message: "Login successful!", redirect: "/main-menu.html" })
     })
@@ -224,5 +246,37 @@ app.post('/logout', function(req, res) {
 });
 
 app.post('/solo', function(req, res) {
+    req.session.user.inRoom = false;
+    req.session.user.roomCode = null;
     res.json({ success: true, message: "Starting solo game", redirect: "/canvas.html" });
 })
+
+app.post('/create-room', function(req, res) {
+    const roomCode = generateRoomCode();
+    let user = req.session.user;
+    rooms.set(roomCode, {
+        code: roomCode,
+        creator: user,
+        members: [user.username]
+    })
+    user.inRoom = true;
+    user.roomCode = roomCode;
+    res.json({ success: true, message: "Creating room", redirect: "/canvas.html" });
+})
+
+app.get('/session-room', function(req, res) {
+    if (!req.session.user || !req.session.user.inRoom) {
+        return res.json({ success: false, message: "Not in a room" });
+    }
+
+    const code = req.session.user.roomCode;
+
+    if (!rooms.has(code)) {
+        return res.json({ success: false, message: "Room not found" });
+    }
+
+    res.json({
+        success: true,
+        room: rooms.get(code)
+    });
+});
