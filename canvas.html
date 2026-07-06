@@ -8,6 +8,8 @@
 </head>
 <body>
     <h1>---DRAW---</h1>
+    <h1 class="roomCode"></h1>
+    <h1 class="roomCreator"></h1>
     <canvas class="canvas">
     </canvas>
 
@@ -44,7 +46,29 @@
 
          <!--  .................Java-Script...................  -->
     <script>
+        let user;
+        fetch('/session-user', {
+            method: 'GET',
+            headers: {
+                'Content-Type' : 'application/json'
+            }
+        }).then(res=>res.json())
+        .then(data=>{
+            user = data.user;
+        })
 
+        fetch('/session-room')
+        .then(res => res.json())
+        .then(data => {
+            if (!data.success) return;
+    
+            document.querySelector('.roomCode').textContent =
+                "Room Code: " + data.room.code;
+    
+            document.querySelector('.roomCreator').textContent =
+                "Room Creator: " + data.room.creator.username;
+        });
+        
         const canvas = document.querySelector('.canvas');
         const ctx = canvas.getContext("2d");
         const sld = document.querySelector(".sizer");
