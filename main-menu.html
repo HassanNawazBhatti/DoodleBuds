@@ -39,102 +39,155 @@
         <div class="footer">
             <p class="footer-text">Developed by Hassan Nawaz. ©2026 DoodleBuds. All rights reserved. </p>
         </div>
+
+        <div class="modal" id="verify-modal">
+            <div class="modal-content">
+                <h2>Join Room</h2>
+                <p>Enter the Room Code</p>
+                <div class="inputs">
+                    <label for="verify-code">
+                        <input type="text" id="verify-code" placeholder="4-digit code" maxlength="4">
+                    </label>
+                    <span class="error" id="verify-error"></span>
+                </div>
+                <div>
+                    <button id="join-btn" type="button">Join</button>
+                </div>
+            </div>
+        
+        </div>
     </div>
 
 
 
     <script>
-        fetch('/session-user', {
-            method: 'GET',
-            headers: {
-                'Content-Type' : 'application/json'
-            }
-        }).then(res=>res.json())
-        .then(data=>{
-            const username = data.user.username;
-            document.querySelector('.greet').textContent = "Welcome, "+username.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')+"!!";
-        })
-        const option = document.querySelectorAll('.option');
-        option.forEach(opt => {
-            opt.addEventListener('mouseenter', () => {
-                opt.classList.add('option-hovered');
-            });
-            opt.addEventListener('mouseleave', () => {
-                opt.classList.remove('option-hovered');
-            });
-            opt.addEventListener('mousedown', () => {
-                opt.classList.add('option-clicked');
-            });
-            opt.addEventListener('mouseup', () => {
-                opt.classList.remove('option-clicked');
+      fetch('/session-user', {
+          method: 'GET',
+          headers: {
+              'Content-Type' : 'application/json'
+          }
+      }).then(res=>res.json())
+      .then(data=>{
+          const username = data.user.username;
+          document.querySelector('.greet').textContent = "Welcome, "+username.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')+"!!";
+      })
 
-                if(event.target.id==='lgout'){
-                    fetch('/logout', {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json'
-                          }
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                          if (data.success) {
-                            // Redirect to the URL provided by the backend ("/")
-                            window.location.href = data.redirect;
-                          } else {
-                            console.error('Logout failed:', data.message);
-                            alert(data.message);
-                          }
-                        })
-                        .catch(error => {
-                          console.error('Network error during logout:', error);
-                        });
-                }
+      const modal = document.getElementById("verify-modal");
+      const modalContent = document.querySelector(".modal-content");
+      const option = document.querySelectorAll('.option');
+      const joinBtn = document.getElementById("join-btn");
 
-                if(event.target.id==='solo'){
-                    fetch('/solo', {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json'
-                          }
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                          if (data.success) {
-                            // Redirect to the URL provided by the backend ("/")
-                            window.location.href = data.redirect;
-                          } else {
-                            console.error('Solo game failed:', data.message);
-                            alert(data.message);
-                          }
-                        })
-                        .catch(error => {
-                          console.error('Network error:', error);
-                        });
-                }
+      option.forEach(opt => {
+          opt.addEventListener('mouseenter', () => {
+              opt.classList.add('option-hovered');
+          });
+          opt.addEventListener('mouseleave', () => {
+              opt.classList.remove('option-hovered');
+          });
+          opt.addEventListener('mousedown', () => {
+              opt.classList.add('option-clicked');
+          });
+          opt.addEventListener('mouseup', () => {
+              opt.classList.remove('option-clicked');
+              if(event.target.id==='lgout'){
+                  fetch('/logout', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        }
+                      })
+                      .then(response => response.json())
+                      .then(data => {
+                        if (data.success) {
+                          // Redirect to the URL provided by the backend ("/")
+                          window.location.href = data.redirect;
+                        } else {
+                          console.error('Logout failed:', data.message);
+                          alert(data.message);
+                        }
+                      })
+                      .catch(error => {
+                        console.error('Network error during logout:', error);
+                      });
+              }
+              if(event.target.id==='solo'){
+                  fetch('/solo', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        }
+                      })
+                      .then(response => response.json())
+                      .then(data => {
+                        if (data.success) {
+                          // Redirect to the URL provided by the backend ("/")
+                          window.location.href = data.redirect;
+                        } else {
+                          console.error('Solo game failed:', data.message);
+                          alert(data.message);
+                        }
+                      })
+                      .catch(error => {
+                        console.error('Network error:', error);
+                      });
+              }
+              if(event.target.id==='crtrm'){
+                  fetch('/create-room', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        }
+                      })
+                      .then(response => response.json())
+                      .then(data => {
+                        if (data.success) {
+                          // Redirect to the URL provided by the backend ("/")
+                          window.location.href = data.redirect;
+                        } else {
+                          console.error('Create room failed:', data.message);
+  
+                        }
+                      })
+                      .catch(error => {
+                        console.error('Network error:', error);
+                      });
+              }
+              if(event.target.id==='joinrm'){
+                  modal.classList.add("show");
+              }
+              
+          });
+      });
 
-                if(event.target.id==='crtrm'){
-                    fetch('/create-room', {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json'
-                          }
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                          if (data.success) {
-                            // Redirect to the URL provided by the backend ("/")
-                            window.location.href = data.redirect;
-                          } else {
-                            console.error('Solo game failed:', data.message);
-                            alert(data.message);
-                          }
-                        })
-                        .catch(error => {
-                          console.error('Network error:', error);
-                        });
-                }
-            });
-        });
+      joinBtn.addEventListener('click', () => {
+        fetch('/join-room', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ code: document.getElementById('verify-code').value })
+            })
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                // Redirect to the URL provided by the backend ("/")
+                window.location.href = data.redirect;
+              } else {
+                document.getElementById('verify-error').textContent = data.message;
+                console.error('Join room failed:', data.message);
+              }
+            })
+            .catch(error => {
+              console.error('Network error during join room:', error);
+            });  
+      })
+      
+      document.addEventListener("click", function(event) {
+        if (event.target === modal) {
+              modal.classList.remove("show");
+          }
+      });
+      
     </script>
 </body>
 
