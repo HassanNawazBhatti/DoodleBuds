@@ -66,8 +66,8 @@ server.listen(port, ()=> {
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'hax****21@gmail.com',
-        pass: 'your-api-key'
+        user: 'haxa****1@gmail.com',
+        pass: 'your-app-key'
     }
 });
 
@@ -77,7 +77,7 @@ function isValidEmail(email) {
 
 function sendVerificationCode(email, code) {
     transporter.sendMail({
-        from: 'haxa****1@gmail.com',
+        from: 'hax*****1@gmail.com',
         to: email,
         subject: 'DoodleBuds Verification Code',
         text: `Your verification code is ${code}. It expires in 10 minutes.
@@ -262,6 +262,22 @@ app.post('/create-room', function(req, res) {
     user.inRoom = true;
     user.roomCode = roomCode;
     res.json({ success: true, message: "Creating room", redirect: "/canvas.html" });
+})
+
+app.post('/join-room', function(req, res) {
+    const roomCode = req.body.code.toUpperCase();
+
+    if (rooms.has(roomCode)) {
+        let room = rooms.get(roomCode);
+        let user = req.session.user;
+        room.members.push(user.username);
+        user.inRoom = true;
+        user.roomCode = roomCode;
+        return res.json({ success: true, message: "Joining room", redirect: "/canvas.html" }); 
+    }
+    else {
+        return res.json({ success: false, message: "Room not found", redirect: null });
+    }
 })
 
 app.get('/session-room', function(req, res) {
