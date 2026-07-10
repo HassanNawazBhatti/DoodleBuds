@@ -42,24 +42,28 @@ app.get('/main-menu.html', function(req, res, next) {
     if (!req.session.user) {
         return res.redirect('/');
     }
+
+
     next();
 });
 app.get('/canvas.html', function(req, res, next) {
     if (!req.session.user) {
         return res.redirect('/');
     }
+    
     next();
 });
 
 app.use(express.static(path.join(__dirname)));
 
 app.get('/', function(req , res) {
-    res.sendFile(path.join(__dirname, 'auth.html'))
+    if(req.session.user) {
     }
-)
+    res.sendFile(path.join(__dirname, 'auth.html'));
+});
 
 server.listen(port, ()=> {
-    console.log('listening on port 3000 !!')
+    console.log('ohh yeah!! listening on port 3000 !!')
 })
 
 // configure this with your real email + an app password (not your normal password)
@@ -77,7 +81,7 @@ function isValidEmail(email) {
 
 function sendVerificationCode(email, code) {
     transporter.sendMail({
-        from: 'hax*****1@gmail.com',
+        from: 'haxa****1@gmail.com',
         to: email,
         subject: 'DoodleBuds Verification Code',
         text: `Your verification code is ${code}. It expires in 10 minutes.
@@ -106,6 +110,32 @@ function generateRoomCode() {
     }
 
     return code;
+}
+
+function leaveRoom(user){
+
+    if(!user.inRoom) return;
+    const room = rooms.get(user.roomCode);
+
+    if(!room){
+        user.inRoom = false;
+        user.roomCode = null;
+        return;
+    }
+
+    if(room.creator &&
+         room.creator.id === user.id){
+        room.creator.username = room.creator.username + " (left)";
+    }
+
+    room.members =room.members.filter(name => name !== user.username);
+
+    if(room.members.length === 0){
+        rooms.delete(user.roomCode);
+    }
+
+    user.inRoom = false;
+    user.roomCode = null;
 }
 
 app.post('/register',function(req, res) {
@@ -237,6 +267,7 @@ app.get('/session-user', function(req, res) {
 });
 
 app.post('/logout', function(req, res) {
+    leaveRoom(req.session.user);
     req.session.destroy(function(err){
         if (err){
             return res.json({ success: false, message: "Could not log out" });
@@ -246,12 +277,12 @@ app.post('/logout', function(req, res) {
 });
 
 app.post('/solo', function(req, res) {
-    req.session.user.inRoom = false;
-    req.session.user.roomCode = null;
+    leaveRoom(req.session.user);
     res.json({ success: true, message: "Starting solo game", redirect: "/canvas.html" });
 })
 
 app.post('/create-room', function(req, res) {
+    leaveRoom(req.session.user);
     const roomCode = generateRoomCode();
     let user = req.session.user;
     rooms.set(roomCode, {
@@ -265,14 +296,20 @@ app.post('/create-room', function(req, res) {
 })
 
 app.post('/join-room', function(req, res) {
+    leaveRoom(req.session.user);
     const roomCode = req.body.code.toUpperCase();
 
     if (rooms.has(roomCode)) {
         let room = rooms.get(roomCode);
         let user = req.session.user;
-        room.members.push(user.username);
+        if (!room.members.includes(user.username)) {
+            room.members.push(user.username);
+        }
         user.inRoom = true;
         user.roomCode = roomCode;
+        if(room.creator && room.creator.id === user.id){
+            room.creator.username = room.creator.username.replace(" (left)", "");
+        }
         return res.json({ success: true, message: "Joining room", redirect: "/canvas.html" }); 
     }
     else {
