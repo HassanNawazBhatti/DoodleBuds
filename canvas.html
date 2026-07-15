@@ -76,6 +76,18 @@
                     userId: user.id
                 });
 
+                socket.on("remote-stroke", (stroke) => {
+
+                    ensureUser(stroke.owner);
+                            
+                    userStrokes[stroke.owner].push(stroke);
+                            
+                    userHistory[stroke.owner] = [];
+                            
+                    redraw();
+                            
+                });
+
             });
 
             document.querySelector('.roomCode').textContent =
@@ -414,6 +426,10 @@
         userStrokes[stroke.owner].push(stroke);
 
         userHistory[stroke.owner] = [];
+
+        if (socket) {
+            socket.emit("stroke-finished", stroke);
+        }
 
         stroke = null;
         }
