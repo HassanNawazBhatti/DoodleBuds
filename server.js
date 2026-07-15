@@ -73,8 +73,8 @@ server.listen(port, ()=> {
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'haxa****1@gmail.com',
-        pass: 'your-app-key'
+        user: 'haxan0921@gmail.com',
+        pass: 'iowd pfhf vuyv aylt'
     }
 });
 
@@ -84,7 +84,7 @@ function isValidEmail(email) {
 
 function sendVerificationCode(email, code) {
     transporter.sendMail({
-        from: 'haxa****1@gmail.com',
+        from: 'haxan0921@gmail.com',
         to: email,
         subject: 'DoodleBuds Verification Code',
         text: `Your verification code is ${code}. It expires in 10 minutes.
@@ -153,16 +153,24 @@ io.on("connection", (socket) => {
 
     socket.on("join-room", ({ roomCode, userId }) => {
 
-    socket.join(roomCode);
+        socket.join(roomCode);
 
-    socket.roomCode = roomCode;
-    socket.userId = userId;
+        socket.roomCode = roomCode;
+        socket.userId = userId;
 
-    console.log(
-        `User ${userId} joined socket room ${roomCode}`
-    );
+        console.log(
+            `User ${userId} joined socket room ${roomCode}`
+        );
 
-});
+    });
+
+    socket.on("stroke-finished", (stroke) => {
+
+        socket.to(socket.roomCode).emit("remote-stroke", stroke);
+
+    });
+
+    
 
 });
 
