@@ -1,6 +1,7 @@
 const express = require('express');
 const app = express();
 const http = require('http');
+const { Server } = require('socket.io');
 const path = require('path');
 const sql = require('sqlite3');
 const session = require('express-session');
@@ -27,6 +28,7 @@ let query = `
 
 db.run(query)
 
+
 // signups that haven't been verified yet live here in memory,
 // keyed by email. Nothing goes into SQLite until verification succeeds.
 let pendingSignups = {};
@@ -35,6 +37,7 @@ const port = 3000;
 let rooms = new Map();
 
 const server = http.createServer(app);
+const io = new Server(server);
 
 // this route MUST come before express.static, otherwise static
 // would serve main-menu.html directly without checking the session
@@ -137,6 +140,31 @@ function leaveRoom(user){
     user.inRoom = false;
     user.roomCode = null;
 }
+
+io.on("connection", (socket) => {
+
+    console.log("Socket connected:", socket.id);
+
+    socket.on("disconnect", () => {
+
+        console.log("Socket disconnected:", socket.id);
+
+    });
+
+    socket.on("join-room", ({ roomCode, userId }) => {
+
+    socket.join(roomCode);
+
+    socket.roomCode = roomCode;
+    socket.userId = userId;
+
+    console.log(
+        `User ${userId} joined socket room ${roomCode}`
+    );
+
+});
+
+});
 
 app.post('/register',function(req, res) {
     const { username, email, password } = req.body;
