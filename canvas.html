@@ -45,7 +45,10 @@
 
 
          <!--  .................Java-Script...................  -->
+
+    <script src="/socket.io/socket.io.js"></script>
     <script>
+        let socket = null;
         let user;
         let room;
         fetch('/session-user', {
@@ -62,7 +65,19 @@
         .then(res => res.json())
         .then(data => {
             if (!data.success) return;
-    
+            
+            socket = io();
+            socket.on("connect", () => {
+
+                console.log("Connected to server with socket ID:", socket.id);
+
+                socket.emit("join-room", {
+                    roomCode: data.room.code,
+                    userId: user.id
+                });
+
+            });
+
             document.querySelector('.roomCode').textContent =
                 "Room Code: " + data.room.code;
     
@@ -88,8 +103,8 @@
         let isdrawing = false;
         let prex = 0;
         let prey = 0;
-        let strokes = [];   
-        let history = [];   
+        let userStrokes = {};   
+        let userHistory = [];   
         let stroke = null;
         let currentTool = "pen";
         let currentShape = "freehand";
@@ -164,6 +179,18 @@
             shapePopup.classList.remove('open');
         })
 
+        function ensureUser(owner){
+
+            if(!userStrokes[owner]){
+                userStrokes[owner] = [];
+            }
+        
+            if(!userHistory[owner]){
+                userHistory[owner] = [];
+            }
+        
+        }
+
         function selectTool(tool) {
             currentTool = tool;
             currentToolLabel.textContent = tool.charAt(0).toUpperCase() + tool.slice(1);
@@ -182,7 +209,6 @@
         function start(e) {
             startx = e.offsetX;
             starty = e.offsetY;
-
             if (isdrawing) return;
 
             const clr = document.querySelector(".colrbtn").value;
@@ -195,6 +221,7 @@
 
             if (currentTool === "eraser") {
                 stroke = {
+                    owner: user.id,
                     tool: "eraser",
                     color: "white",
                     size: size,
@@ -203,6 +230,7 @@
             } 
             else if(currentTool === "neon"){
                 stroke = {
+                    owner: user.id,
                     tool: "neon",
                     color: clr,
                     size: size,
@@ -211,6 +239,7 @@
             } 
             else {
                 stroke = {
+                    owner: user.id,
                     tool: "pen",
                     color: clr,
                     size: size,
@@ -265,7 +294,7 @@
 
         function drawrect(x1,y1,x2,y2){
             stroke.points = [];// as eacg time mouse moves, previous preview is replaced by current(first preview is dot)
-            redraw(strokes);
+            redraw();
             applyStrokeStyle(stroke);
             ctx.beginPath();
             ctx.moveTo(x1, y1);
@@ -287,7 +316,7 @@
 
             stroke.points = [];
         
-            redraw(strokes);
+            redraw();
         
             applyStrokeStyle(stroke);
         
@@ -325,7 +354,7 @@
         
         function drawshapedline(x1,y1,x2,y2){
             stroke.points = [];// as eacg time mouse moves, previous preview is replaced by current(first preview is dot)
-            redraw(strokes);
+            redraw();
             applyStrokeStyle(stroke);
             ctx.beginPath();
             ctx.moveTo(x1, y1);
@@ -374,47 +403,84 @@
 
 
         function saveStroke() {
-            if (stroke && stroke.points.length > 0) {
-                strokes.push(stroke);
-                history = [];
-            }
+
+        if (!stroke || stroke.points.length === 0) {
             stroke = null;
+            return;
+        }
+
+        ensureUser(stroke.owner);
+
+        userStrokes[stroke.owner].push(stroke);
+
+        userHistory[stroke.owner] = [];
+
+        stroke = null;
         }
 
         function undo() {
-            if (strokes.length === 0) return;
-            const last = strokes.pop();
-            history.push(last);
-            redraw(strokes);
+
+        ensureUser(user.id);
+
+        if (userStrokes[user.id].length === 0) return;
+
+        const last = userStrokes[user.id].pop();
+
+        userHistory[user.id].push(last);
+
+        redraw();
+
         }
 
         function redo() {
-            if (history.length === 0) return;
-            const next = history.pop();
-            strokes.push(next);
-            redraw(strokes);
+
+            ensureUser(user.id);
+
+            if (userHistory[user.id].length === 0) return;
+
+            const next = userHistory[user.id].pop();
+
+            userStrokes[user.id].push(next);
+
+            redraw();
+
         }
 
-        function redraw(strokesToDraw) {
+        function redraw() {
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            for (let i = 0; i < strokesToDraw.length; i++) {
-                const s = strokesToDraw[i];
-                for (let j = 0; j < s.points.length; j++) {
-                    const p = s.points[j];
+            for (const owner in userStrokes) {
+            
+                const strokes = userStrokes[owner];
+            
+                for (let i = 0; i < strokes.length; i++) {
+                
+                    const s = strokes[i];
+                
                     applyStrokeStyle(s);
-                    ctx.beginPath();
-                    ctx.moveTo(p.x1, p.y1);
-                    ctx.lineTo(p.x2, p.y2);
-                    ctx.stroke();
+                
+                    for (let j = 0; j < s.points.length; j++) {
+                    
+                        const p = s.points[j];
+                    
+                        ctx.beginPath();
+                    
+                        ctx.moveTo(p.x1, p.y1);
+                    
+                        ctx.lineTo(p.x2, p.y2);
+                    
+                        ctx.stroke();
+                    
+                    }
                 }
             }
         }
 
         function clearCanvas() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            strokes = [];
-            history = [];
+            userStrokes = {};
+            userHistory = {};
             stroke = null;
             isdrawing = false;
         }
