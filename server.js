@@ -152,6 +152,10 @@ io.on("connection", (socket) => {
 
         console.log("Socket disconnected:", socket.id);
 
+        if (socket.roomCode && socket.userId) {
+            socket.to(socket.roomCode).emit("remote-stroke", { owner: socket.userId, points: [] });
+        }
+
     });
 
     socket.on("join-room", ({ roomCode, userId }) => {
@@ -173,13 +177,21 @@ io.on("connection", (socket) => {
 
     });
 
-    socket.on("live-segment", (data) => {
-        socket.to(socket.roomCode).emit("remote-live-segment", data);
+    socket.on("live-stroke", (data) => {
+        socket.to(socket.roomCode).emit("remote-live-stroke", data);
     });
 
-    socket.on("live-stroke"), (data) => {
-        socket.to(socket.roomCode).emit("remote-live-stroke", data);
-    }
+    socket.on("user-undo", (data) => {
+        socket.to(socket.roomCode).emit("remote-user-undo", data);
+    });
+
+    socket.on("user-redo", (data) => {
+        socket.to(socket.roomCode).emit("remote-user-redo", data);
+    });
+
+    socket.on("clear-canvas", () => {
+        socket.to(socket.roomCode).emit("remote-clear-canvas");
+    });
 
 });
 
