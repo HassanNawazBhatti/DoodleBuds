@@ -79,11 +79,31 @@
                 socket.on("remote-stroke", (stroke) => {
 
                     ensureUser(stroke.owner);
+
+                    delete activeStrokes[stroke.owner];
                             
                     userStrokes[stroke.owner].push(stroke);
                             
                     userHistory[stroke.owner] = [];
                             
+                    redraw();
+                            
+                });
+
+                socket.on("remote-live-segment", (data) => {
+
+                    applyStrokeStyle(data);
+
+                    ctx.beginPath();
+                    ctx.moveTo(data.x1, data.y1);
+                    ctx.lineTo(data.x2, data.y2);
+                    ctx.stroke();
+
+                });
+
+                socket.on("remote-live-stroke", (data) => {
+
+                    activeStrokes[data.owner] = data;
                     redraw();
                             
                 });
@@ -116,6 +136,7 @@
         let prex = 0;
         let prey = 0;
         let userStrokes = {};   
+        let activeStrokes = {};
         let userHistory = [];   
         let stroke = null;
         let currentTool = "pen";
@@ -259,6 +280,8 @@
                 };
             }
 
+            activeStrokes[user.id] = stroke;
+
             isdrawing = true;
             prex = e.offsetX;
             prey = e.offsetY;
@@ -296,12 +319,25 @@
         function drawline(x1, y1, x2, y2) {
             const segment = { x1, y1, x2, y2 };
             stroke.points.push(segment);
+            socket.emit("live-stroke", stroke);
 
             applyStrokeStyle(stroke);
             ctx.beginPath();
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
             ctx.stroke();
+
+            if(socket){
+                socket.emit("live-segment",{
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    tool: stroke.tool,
+                    color: stroke.color,
+                    size: stroke.size,
+                });
+            }
         }
 
         function drawrect(x1,y1,x2,y2){
@@ -417,6 +453,7 @@
         function saveStroke() {
 
         if (!stroke || stroke.points.length === 0) {
+            delete activeStrokes[user.id];
             stroke = null;
             return;
         }
@@ -491,6 +528,23 @@
                     }
                 }
             }
+
+
+            for (const owner in activeStrokes) {
+
+               const s = activeStrokes[owner];
+
+               applyStrokeStyle(s);
+
+               for (const p of s.points) {
+
+                   ctx.beginPath();
+                   ctx.moveTo(p.x1, p.y1);
+                   ctx.lineTo(p.x2, p.y2);
+                   ctx.stroke();
+
+               }
+            }           
         }
 
         function clearCanvas() {
