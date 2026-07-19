@@ -7,6 +7,9 @@ const sql = require('sqlite3');
 const session = require('express-session');
 const nodemailer = require('nodemailer');
 const db = new sql.Database('./users.db');
+require('dotenv').config();
+
+
 
 app.use(express.json());
 
@@ -73,8 +76,8 @@ server.listen(port, ()=> {
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'haxan0921@gmail.com',
-        pass: 'iowd pfhf vuyv aylt'
+        user: process.env.GMAIL,
+        pass: process.env.APP_KEY
     }
 });
 
@@ -84,7 +87,7 @@ function isValidEmail(email) {
 
 function sendVerificationCode(email, code) {
     transporter.sendMail({
-        from: 'haxan0921@gmail.com',
+        from: process.env.GMAIL,
         to: email,
         subject: 'DoodleBuds Verification Code',
         text: `Your verification code is ${code}. It expires in 10 minutes.
@@ -170,7 +173,13 @@ io.on("connection", (socket) => {
 
     });
 
-    
+    socket.on("live-segment", (data) => {
+        socket.to(socket.roomCode).emit("remote-live-segment", data);
+    });
+
+    socket.on("live-stroke"), (data) => {
+        socket.to(socket.roomCode).emit("remote-live-stroke", data);
+    }
 
 });
 
