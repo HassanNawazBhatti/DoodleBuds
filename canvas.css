@@ -170,6 +170,19 @@ h1{
     font-size: 14px;
 }
 
+.user-cursor-label{
+    position: fixed;
+    pointer-events: none;
+    background-color: rgba(0,0,0,0.65);
+    color: white;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    transform: translate(-50%, -140%);
+    z-index: 999;
+    white-space: nowrap;
+}
+
 /* ---- Tool / Shape compact popup toolbar ---- */
 
 .tool-control{
