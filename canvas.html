@@ -81,23 +81,15 @@
                     ensureUser(stroke.owner);
 
                     delete activeStrokes[stroke.owner];
-                            
-                    userStrokes[stroke.owner].push(stroke);
-                            
-                    userHistory[stroke.owner] = [];
-                            
+
+                    removeCursorLabel(stroke.owner);
+
+                    if (stroke.points && stroke.points.length > 0) {
+                        userStrokes[stroke.owner].push(stroke);
+                        userHistory[stroke.owner] = [];
+                    }
+
                     redraw();
-                            
-                });
-
-                socket.on("remote-live-segment", (data) => {
-
-                    applyStrokeStyle(data);
-
-                    ctx.beginPath();
-                    ctx.moveTo(data.x1, data.y1);
-                    ctx.lineTo(data.x2, data.y2);
-                    ctx.stroke();
 
                 });
 
@@ -105,7 +97,44 @@
 
                     activeStrokes[data.owner] = data;
                     redraw();
-                            
+
+                    if (data.points && data.points.length > 0) {
+                        const last = data.points[data.points.length - 1];
+                        updateCursorLabel(data.owner, data.ownerName, last.x2, last.y2);
+                    }
+
+                });
+
+                socket.on("remote-user-undo", ({ owner }) => {
+
+                    ensureUser(owner);
+
+                    if (userStrokes[owner].length === 0) return;
+
+                    const last = userStrokes[owner].pop();
+
+                    userHistory[owner].push(last);
+
+                    redraw();
+
+                });
+
+                socket.on("remote-user-redo", ({ owner }) => {
+
+                    ensureUser(owner);
+
+                    if (userHistory[owner].length === 0) return;
+
+                    const next = userHistory[owner].pop();
+
+                    userStrokes[owner].push(next);
+
+                    redraw();
+
+                });
+
+                socket.on("remote-clear-canvas", () => {
+                    resetLocalState();
                 });
 
             });
@@ -143,6 +172,7 @@
         let currentShape = "freehand";
         let startx,starty = 0;
         const dotsize = 0.001;
+        let cursorLabels = {};
 
         const btn = document.querySelector('.clrbtn');
         btn.addEventListener('pointerdown', function() {
@@ -252,31 +282,39 @@
             // makes drawing smooth and continuous on touch devices.
             canvas.setPointerCapture(e.pointerId);
 
+            const seq = Date.now();
+
             if (currentTool === "eraser") {
                 stroke = {
                     owner: user.id,
+                    ownerName: user.username,
                     tool: "eraser",
                     color: "white",
                     size: size,
-                    points: []
+                    points: [],
+                    seq: seq
                 };
             } 
             else if(currentTool === "neon"){
                 stroke = {
                     owner: user.id,
+                    ownerName: user.username,
                     tool: "neon",
                     color: clr,
                     size: size,
-                    points: []
+                    points: [],
+                    seq: seq
                 };
             } 
             else {
                 stroke = {
                     owner: user.id,
+                    ownerName: user.username,
                     tool: "pen",
                     color: clr,
                     size: size,
-                    points: []
+                    points: [],
+                    seq: seq
                 };
             }
 
@@ -316,10 +354,15 @@
             prey = curry;
         }
 
+        function broadcastLiveStroke() {
+            if (socket) {
+                socket.emit("live-stroke", stroke);
+            }
+        }
+
         function drawline(x1, y1, x2, y2) {
             const segment = { x1, y1, x2, y2 };
             stroke.points.push(segment);
-            socket.emit("live-stroke", stroke);
 
             applyStrokeStyle(stroke);
             ctx.beginPath();
@@ -327,17 +370,7 @@
             ctx.lineTo(x2, y2);
             ctx.stroke();
 
-            if(socket){
-                socket.emit("live-segment",{
-                    x1,
-                    y1,
-                    x2,
-                    y2,
-                    tool: stroke.tool,
-                    color: stroke.color,
-                    size: stroke.size,
-                });
-            }
+            broadcastLiveStroke();
         }
 
         function drawrect(x1,y1,x2,y2){
@@ -356,8 +389,8 @@
             const seg3 = { x1:x2, y1:y2, x2:x1, y2:y2 };
             const seg4 = { x1:x1, y1:y2, x2:x1, y2:y1 };
             stroke.points.push(seg1,seg2,seg3,seg4);
-            
-            
+
+            broadcastLiveStroke();
         }
 
         function drawcircle(x1,y1,x2,y2){
@@ -398,6 +431,8 @@
                 y2: cy + radius*Math.sin(a2)
                 });
             }
+
+            broadcastLiveStroke();
         }
         
         function drawshapedline(x1,y1,x2,y2){
@@ -410,25 +445,28 @@
             ctx.stroke();
             const seg = {x1,y1,x2,y2};
             stroke.points.push(seg);
-            
-            
+
+            broadcastLiveStroke();
         }
 
         function applyStrokeStyle(s) {
             ctx.lineCap = "round";
             if (s.tool === "eraser") {
-                ctx.strokeStyle = "white";
+                ctx.globalCompositeOperation = "destination-out";
+                ctx.strokeStyle = "rgba(0,0,0,1)";
                 ctx.lineWidth = s.size * ERASER_MULTIPLIER;
                 ctx.shadowColor = "transparent";
                 ctx.shadowBlur = 0;
             } 
             else if(s.tool ==="neon"){
+                ctx.globalCompositeOperation = "source-over";
                 ctx.strokeStyle = 'white';
                 ctx.lineWidth = s.size;
                 ctx.shadowColor = s.color;
                 ctx.shadowBlur = Math.max(12, s.size * 4);
             }
             else  {
+                ctx.globalCompositeOperation = "source-over";
                 ctx.strokeStyle = s.color;
                 ctx.lineWidth = s.size;
                 ctx.shadowBlur = 0;
@@ -452,6 +490,10 @@
 
         function saveStroke() {
 
+        if (socket && stroke) {
+            socket.emit("stroke-finished", stroke);
+        }
+
         if (!stroke || stroke.points.length === 0) {
             delete activeStrokes[user.id];
             stroke = null;
@@ -464,9 +506,7 @@
 
         userHistory[stroke.owner] = [];
 
-        if (socket) {
-            socket.emit("stroke-finished", stroke);
-        }
+        delete activeStrokes[stroke.owner];
 
         stroke = null;
         }
@@ -483,6 +523,10 @@
 
         redraw();
 
+        if (socket) {
+            socket.emit("user-undo", { owner: user.id });
+        }
+
         }
 
         function redo() {
@@ -497,62 +541,95 @@
 
             redraw();
 
+            if (socket) {
+                socket.emit("user-redo", { owner: user.id });
+            }
+
         }
 
         function redraw() {
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+            const allStrokes = [];
+
             for (const owner in userStrokes) {
-            
-                const strokes = userStrokes[owner];
-            
-                for (let i = 0; i < strokes.length; i++) {
-                
-                    const s = strokes[i];
-                
-                    applyStrokeStyle(s);
-                
-                    for (let j = 0; j < s.points.length; j++) {
-                    
-                        const p = s.points[j];
-                    
-                        ctx.beginPath();
-                    
-                        ctx.moveTo(p.x1, p.y1);
-                    
-                        ctx.lineTo(p.x2, p.y2);
-                    
-                        ctx.stroke();
-                    
-                    }
+                for (const s of userStrokes[owner]) {
+                    allStrokes.push(s);
                 }
             }
 
-
             for (const owner in activeStrokes) {
+                allStrokes.push(activeStrokes[owner]);
+            }
 
-               const s = activeStrokes[owner];
+            allStrokes.sort(function(a, b) {
+                return (a.seq || 0) - (b.seq || 0);
+            });
 
-               applyStrokeStyle(s);
+            for (const s of allStrokes) {
 
-               for (const p of s.points) {
+                applyStrokeStyle(s);
 
-                   ctx.beginPath();
-                   ctx.moveTo(p.x1, p.y1);
-                   ctx.lineTo(p.x2, p.y2);
-                   ctx.stroke();
+                for (const p of s.points) {
 
-               }
-            }           
+                    ctx.beginPath();
+                    ctx.moveTo(p.x1, p.y1);
+                    ctx.lineTo(p.x2, p.y2);
+                    ctx.stroke();
+
+                }
+            }
+
+            ctx.globalCompositeOperation = "source-over";
         }
 
-        function clearCanvas() {
+        function updateCursorLabel(owner, name, x, y) {
+
+            let label = cursorLabels[owner];
+
+            if (!label) {
+                label = document.createElement('div');
+                label.className = 'user-cursor-label';
+                document.body.appendChild(label);
+                cursorLabels[owner] = label;
+            }
+
+            label.textContent = name || 'Guest';
+
+            const liveRect = canvas.getBoundingClientRect();
+            const scaleX = liveRect.width / canvas.width;
+            const scaleY = liveRect.height / canvas.height;
+
+            label.style.left = (liveRect.left + x * scaleX) + "px";
+            label.style.top = (liveRect.top + y * scaleY) + "px";
+        }
+
+        function removeCursorLabel(owner) {
+            const label = cursorLabels[owner];
+            if (label) {
+                label.remove();
+                delete cursorLabels[owner];
+            }
+        }
+
+        function resetLocalState() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             userStrokes = {};
             userHistory = {};
+            activeStrokes = {};
+            for (const owner in cursorLabels) {
+                removeCursorLabel(owner);
+            }
             stroke = null;
             isdrawing = false;
+        }
+
+        function clearCanvas() {
+            resetLocalState();
+            if (socket) {
+                socket.emit("clear-canvas");
+            }
         }
 
 
