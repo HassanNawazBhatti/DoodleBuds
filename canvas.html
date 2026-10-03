@@ -12,6 +12,7 @@
     <h1 class="roomCreator"></h1>
     <canvas class="canvas">
     </canvas>
+    <canvas class="cursor-layer"></canvas>
 
     <div class="tool-control">
         <button class="toolbtn">Tool: <span class="current-tool">Pen</span></button>
@@ -43,9 +44,6 @@
             <p class="footer-text">Developed by Hassan Nawaz. ©2026 DoodleBuds. All rights reserved. </p>
     </div>
 
-
-         <!--  .................Java-Script...................  -->
-
     <script src="/socket.io/socket.io.js"></script>
     <script>
         let socket = null;
@@ -76,6 +74,43 @@
                     userId: user.id
                 });
 
+                socket.on("room-state", ({ strokes, history }) => {
+                    for (const owner in strokes) {
+                        ensureUser(owner);
+                        userStrokes[owner] = strokes[owner];
+                    }
+                    for (const owner in history) {
+                        ensureUser(owner);
+                        userHistory[owner] = history[owner];
+                    }
+                    isStrokesDirty = true;
+                    requestRedraw();
+                });
+
+                socket.on("remote-live-segment", (data) => {
+                    ensureUser(data.owner);
+                    if (!activeStrokes[data.owner]) {
+                        activeStrokes[data.owner] = {
+                            owner: data.owner,
+                            ownerName: data.ownerName,
+                            tool: data.tool,
+                            shape: data.shape || "freehand",
+                            color: data.color,
+                            size: data.size,
+                            seq: data.seq,
+                            points: []
+                        };
+                        isStrokesDirty = true;
+                    }
+                    activeStrokes[data.owner].points.push(data.point);
+
+                    drawSegmentDirect(activeStrokes[data.owner], data.point);
+
+                    const p = data.point;
+                    updateCursorLabel(data.owner, data.ownerName, p.x2, p.y2);
+                    refreshCursorLabels();
+                });
+
                 socket.on("remote-stroke", (stroke) => {
 
                     ensureUser(stroke.owner);
@@ -89,14 +124,16 @@
                         userHistory[stroke.owner] = [];
                     }
 
-                    redraw();
+                    isStrokesDirty = true;
+                    requestRedraw();
 
                 });
 
                 socket.on("remote-live-stroke", (data) => {
 
                     activeStrokes[data.owner] = data;
-                    redraw();
+                    isStrokesDirty = true;
+                    requestRedraw();
 
                     if (data.points && data.points.length > 0) {
                         const last = data.points[data.points.length - 1];
@@ -115,7 +152,8 @@
 
                     userHistory[owner].push(last);
 
-                    redraw();
+                    isStrokesDirty = true;
+                    requestRedraw();
 
                 });
 
@@ -129,7 +167,8 @@
 
                     userStrokes[owner].push(next);
 
-                    redraw();
+                    isStrokesDirty = true;
+                    requestRedraw();
 
                 });
 
@@ -153,13 +192,43 @@
         const ctx = canvas.getContext("2d");
         const sld = document.querySelector(".sizer");
 
+        // Dedicated overlay canvas for remote cursor labels. Keeping labels on
+        // their own transparent layer lets us refresh them cheaply (just this
+        // small overlay) without doing a full redraw of the main drawing
+        // canvas on every incoming live freehand segment.
+        const cursorCanvas = document.querySelector('.cursor-layer');
+        const cursorCtx = cursorCanvas.getContext("2d");
+
+        function syncCursorCanvasSize() {
+            const r = canvas.getBoundingClientRect();
+            cursorCanvas.style.position = 'fixed';
+            cursorCanvas.style.left = r.left + 'px';
+            cursorCanvas.style.top = r.top + 'px';
+            cursorCanvas.style.width = r.width + 'px';
+            cursorCanvas.style.height = r.height + 'px';
+            cursorCanvas.style.pointerEvents = 'none';
+            cursorCanvas.style.zIndex = 10;
+            cursorCanvas.width = canvas.width;
+            cursorCanvas.height = canvas.height;
+        }
+
 
         const rect = canvas.getBoundingClientRect();
         canvas.width = rect.width;
         canvas.height = rect.height;
 
+        syncCursorCanvasSize();
 
-        const ERASER_MULTIPLIER = 3.5;
+        window.addEventListener('resize', function() {
+            const r = canvas.getBoundingClientRect();
+            canvas.width = r.width;
+            canvas.height = r.height;
+            syncCursorCanvasSize();
+            requestRedraw();
+        });
+
+
+        const ERASER_MULTIPLIER = 4;
 
         let isdrawing = false;
         let prex = 0;
@@ -173,6 +242,23 @@
         let startx,starty = 0;
         const dotsize = 0.001;
         let cursorLabels = {};
+        let lastShapeFrame = 0;
+
+        let cachedAllStrokes = [];
+        let isStrokesDirty = true;
+        let redrawPending = false;
+
+        function requestRedraw() {
+            if (!redrawPending) {
+                redrawPending = true;
+                requestAnimationFrame(executeRedraw);
+            }
+        }
+
+        function executeRedraw() {
+            redrawPending = false;
+            redraw();
+        }
 
         const btn = document.querySelector('.clrbtn');
         btn.addEventListener('pointerdown', function() {
@@ -277,22 +363,19 @@
             const clr = document.querySelector(".colrbtn").value;
             const size = document.querySelector(".sizer").value;
 
-            // Capture the pointer so we keep getting move/up events for THIS
-            // pointer even if it slides outside the canvas. This is what
-            // makes drawing smooth and continuous on touch devices.
             canvas.setPointerCapture(e.pointerId);
 
-            const seq = Date.now();
+            const effShape = getEffectiveShape();
 
             if (currentTool === "eraser") {
                 stroke = {
                     owner: user.id,
                     ownerName: user.username,
                     tool: "eraser",
+                    shape: effShape,
                     color: "white",
                     size: size,
-                    points: [],
-                    seq: seq
+                    points: []
                 };
             } 
             else if(currentTool === "neon"){
@@ -300,10 +383,10 @@
                     owner: user.id,
                     ownerName: user.username,
                     tool: "neon",
+                    shape: effShape,
                     color: clr,
                     size: size,
-                    points: [],
-                    seq: seq
+                    points: []
                 };
             } 
             else {
@@ -311,14 +394,16 @@
                     owner: user.id,
                     ownerName: user.username,
                     tool: "pen",
+                    shape: effShape,
                     color: clr,
                     size: size,
-                    points: [],
-                    seq: seq
+                    points: []
                 };
             }
 
+            stroke.seq = Date.now();
             activeStrokes[user.id] = stroke;
+            isStrokesDirty = true;
 
             isdrawing = true;
             prex = e.offsetX;
@@ -328,30 +413,33 @@
 
         function draw(e) {
             if (!isdrawing) return;
-            e.preventDefault(); // belt-and-suspenders against scroll/pan on touch
-
-            let currx = e.offsetX;
-            let curry = e.offsetY;
+            e.preventDefault();
 
             const shape = getEffectiveShape();
 
             if(shape === "rectangle"){
-                drawrect(startx, starty, currx, curry);
+                drawrect(startx, starty, e.offsetX, e.offsetY);
                 return;
             }
             else if(shape === "circle"){
-                drawcircle(startx,starty,currx,curry);
+                drawcircle(startx, starty, e.offsetX, e.offsetY);
                 return;
             }
             else if(shape === "line"){
-                drawshapedline(startx,starty,currx,curry);
+                drawshapedline(startx, starty, e.offsetX, e.offsetY);
                 return;
             }
-            else
-            drawline(prex, prey, currx, curry);
 
-            prex = currx;
-            prey = curry;
+            const currx = e.offsetX;
+            const curry = e.offsetY;
+            const dx = currx - prex;
+            const dy = curry - prey;
+
+            if (dx * dx + dy * dy >= 1) {
+                drawline(prex, prey, currx, curry);
+                prex = currx;
+                prey = curry;
+            }
         }
 
         function broadcastLiveStroke() {
@@ -361,176 +449,286 @@
         }
 
         function drawline(x1, y1, x2, y2) {
-            const segment = { x1, y1, x2, y2 };
+            const nx1 = x1 / canvas.width;
+            const ny1 = y1 / canvas.height;
+            const nx2 = x2 / canvas.width;
+            const ny2 = y2 / canvas.height;
+            const segment = { x1: nx1, y1: ny1, x2: nx2, y2: ny2 };
             stroke.points.push(segment);
 
-            applyStrokeStyle(stroke);
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
+            drawSegmentDirect(stroke, segment);
 
-            broadcastLiveStroke();
+            if (socket) {
+                socket.emit("live-segment", {
+                    owner: stroke.owner,
+                    ownerName: stroke.ownerName,
+                    tool: stroke.tool,
+                    shape: stroke.shape,
+                    color: stroke.color,
+                    seq: stroke.seq,
+                    size: stroke.size,
+                    point: segment
+                });
+            }
         }
 
         function drawrect(x1,y1,x2,y2){
-            stroke.points = [];// as eacg time mouse moves, previous preview is replaced by current(first preview is dot)
-            redraw();
-            applyStrokeStyle(stroke);
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y1);
-            ctx.lineTo(x2,y2);
-            ctx.lineTo(x1,y2);
-            ctx.lineTo(x1,y1);
-            ctx.stroke();
-            const seg1 = { x1:x1, y1:y1, x2:x2, y2:y1 };
-            const seg2 = { x1:x2, y1:y1, x2:x2, y2:y2 };
-            const seg3 = { x1:x2, y1:y2, x2:x1, y2:y2 };
-            const seg4 = { x1:x1, y1:y2, x2:x1, y2:y1 };
-            stroke.points.push(seg1,seg2,seg3,seg4);
+            stroke.points = [
+                { x1: x1/canvas.width, y1: y1/canvas.height, x2: x2/canvas.width, y2: y1/canvas.height },
+                { x1: x2/canvas.width, y1: y1/canvas.height, x2: x2/canvas.width, y2: y2/canvas.height },
+                { x1: x2/canvas.width, y1: y2/canvas.height, x2: x1/canvas.width, y2: y2/canvas.height },
+                { x1: x1/canvas.width, y1: y2/canvas.height, x2: x1/canvas.width, y2: y1/canvas.height }
+            ];
+
+            const now = Date.now();
+            if (now - lastShapeFrame < 16) return;
+            lastShapeFrame = now;
+
+            requestRedraw();
 
             broadcastLiveStroke();
         }
 
         function drawcircle(x1,y1,x2,y2){
 
-            stroke.points = [];
-        
-            redraw();
-        
-            applyStrokeStyle(stroke);
-        
-            // midpoint = centre
             const cx = (x1 + x2) / 2;
             const cy = (y1 + y2) / 2;
-        
-            // diameter = distance between mouse points
+
             const radius = Math.sqrt(
                 (x2-x1)*(x2-x1) +
                 (y2-y1)*(y2-y1)
             ) / 2;
-        
-            ctx.beginPath();
-            ctx.arc(cx, cy, radius, 0, Math.PI*2);
-            ctx.stroke();
-            
-            const pieces = 72;
-            
-            for(let i=0;i<pieces;i++){
 
+            stroke.points = [];
+            const pieces = 72;
+            for(let i=0;i<pieces;i++){
                 const a1 = (i/pieces) * Math.PI*2;
                 const a2 = ((i+1)/pieces) * Math.PI*2;
-
                 stroke.points.push({
-
-                x1: cx + radius*Math.cos(a1),
-                y1: cy + radius*Math.sin(a1),
-
-                x2: cx + radius*Math.cos(a2),
-                y2: cy + radius*Math.sin(a2)
+                    x1: (cx + radius*Math.cos(a1)) / canvas.width,
+                    y1: (cy + radius*Math.sin(a1)) / canvas.height,
+                    x2: (cx + radius*Math.cos(a2)) / canvas.width,
+                    y2: (cy + radius*Math.sin(a2)) / canvas.height
                 });
             }
 
-            broadcastLiveStroke();
-        }
-        
-        function drawshapedline(x1,y1,x2,y2){
-            stroke.points = [];// as eacg time mouse moves, previous preview is replaced by current(first preview is dot)
-            redraw();
-            applyStrokeStyle(stroke);
-            ctx.beginPath();
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-            ctx.stroke();
-            const seg = {x1,y1,x2,y2};
-            stroke.points.push(seg);
+            const now = Date.now();
+            if (now - lastShapeFrame < 16) return;
+            lastShapeFrame = now;
+
+            requestRedraw();
 
             broadcastLiveStroke();
+        }
+
+        function drawshapedline(x1,y1,x2,y2){
+            stroke.points = [{
+                x1: x1/canvas.width,
+                y1: y1/canvas.height,
+                x2: x2/canvas.width,
+                y2: y2/canvas.height
+            }];
+
+            const now = Date.now();
+            if (now - lastShapeFrame < 16) return;
+            lastShapeFrame = now;
+
+            requestRedraw();
+
+            broadcastLiveStroke();
+        }
+
+        function saveStroke() {
+
+            if (!stroke || stroke.points.length === 0) return;
+
+            ensureUser(user.id);
+
+            delete activeStrokes[user.id];
+
+            removeCursorLabel(user.id);
+
+            userHistory[user.id] = [];
+
+            if (socket) {
+                socket.emit("stroke-finished", stroke);
+            }
+
+            stroke = null;
+
+            isStrokesDirty = true;
+
+        }
+
+        function end(e) {
+            if (!isdrawing) return;
+
+            if (e && e.pointerId !== undefined) {
+                try {
+                    canvas.releasePointerCapture(e.pointerId);
+                } catch (err) {}
+            }
+
+            isdrawing = false;
+
+            saveStroke();
         }
 
         function applyStrokeStyle(s) {
+            ctx.lineWidth = s.size;
             ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+
             if (s.tool === "eraser") {
                 ctx.globalCompositeOperation = "destination-out";
                 ctx.strokeStyle = "rgba(0,0,0,1)";
                 ctx.lineWidth = s.size * ERASER_MULTIPLIER;
                 ctx.shadowColor = "transparent";
                 ctx.shadowBlur = 0;
-            } 
-            else if(s.tool ==="neon"){
+            }  else if (s.tool === "neon") {
                 ctx.globalCompositeOperation = "source-over";
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = s.size;
+                ctx.strokeStyle = "white";
                 ctx.shadowColor = s.color;
-                ctx.shadowBlur = Math.max(12, s.size * 4);
-            }
-            else  {
+                ctx.shadowBlur = 17;
+            } else {
                 ctx.globalCompositeOperation = "source-over";
                 ctx.strokeStyle = s.color;
-                ctx.lineWidth = s.size;
                 ctx.shadowBlur = 0;
-                ctx.shadowColor = "transparent";
             }
         }
 
-        function stopp(e) {
+        function drawStrokeSegments(s) {
+            if (!s.points || s.points.length === 0) return;
 
-            if (!isdrawing) return;
+            applyStrokeStyle(s);
 
-            isdrawing = false;
-
-            if (e && canvas.hasPointerCapture(e.pointerId)) {
-                canvas.releasePointerCapture(e.pointerId);
+            for (let i = 0; i < s.points.length; i++) {
+                const p = s.points[i];
+                ctx.beginPath();
+                ctx.moveTo(p.x1 * canvas.width, p.y1 * canvas.height);
+                ctx.lineTo(p.x2 * canvas.width, p.y2 * canvas.height);
+                ctx.stroke();
             }
 
-            saveStroke();
+            ctx.shadowBlur = 0;
         }
 
+        // Draws a single freehand segment directly onto the canvas, without
+        // touching any other pixels. Used for local and remote live-segment
+        // drawing so we never have to clear/redraw the whole canvas mid-stroke.
+        function drawSegmentDirect(s, p) {
+            applyStrokeStyle(s);
 
-        function saveStroke() {
+            ctx.beginPath();
+            ctx.moveTo(p.x1 * canvas.width, p.y1 * canvas.height);
+            ctx.lineTo(p.x2 * canvas.width, p.y2 * canvas.height);
+            ctx.stroke();
 
-        if (socket && stroke) {
-            socket.emit("stroke-finished", stroke);
+            ctx.shadowBlur = 0;
         }
 
-        if (!stroke || stroke.points.length === 0) {
-            delete activeStrokes[user.id];
-            stroke = null;
-            return;
+        // Cheaply refreshes just the cursor-label overlay (clears the small
+        // transparent overlay canvas and redraws current labels), so remote
+        // cursor labels stay correct without a full-canvas redraw.
+        function refreshCursorLabels() {
+            cursorCtx.clearRect(0, 0, cursorCanvas.width, cursorCanvas.height);
+            drawCursorLabels();
         }
 
-        ensureUser(stroke.owner);
+        function buildSortedStrokes() {
+            let list = [];
 
-        userStrokes[stroke.owner].push(stroke);
+            for (const owner in userStrokes) {
+                const arr = userStrokes[owner];
+                for (let i = 0; i < arr.length; i++) {
+                    list.push(arr[i]);
+                }
+            }
 
-        userHistory[stroke.owner] = [];
+            for (const owner in activeStrokes) {
+                if (activeStrokes[owner] && activeStrokes[owner].points.length > 0) {
+                    list.push(activeStrokes[owner]);
+                }
+            }
 
-        delete activeStrokes[stroke.owner];
+            list.sort((a, b) => (a.seq || 0) - (b.seq || 0));
 
-        stroke = null;
+            return list;
+        }
+
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (isStrokesDirty) {
+                cachedAllStrokes = buildSortedStrokes();
+                isStrokesDirty = false;
+            }
+
+            for (let i = 0; i < cachedAllStrokes.length; i++) {
+                drawStrokeSegments(cachedAllStrokes[i]);
+            }
+
+            refreshCursorLabels();
+        }
+
+        function updateCursorLabel(ownerId, name, normX, normY) {
+            if (ownerId == user.id) return;
+
+            cursorLabels[ownerId] = {
+                name: name || "User " + ownerId,
+                x: normX * canvas.width,
+                y: normY * canvas.height
+            };
+        }
+
+        function removeCursorLabel(ownerId) {
+            delete cursorLabels[ownerId];
+        }
+
+        function drawCursorLabels() {
+            cursorCtx.save();
+            cursorCtx.font = "12px sans-serif";
+            cursorCtx.textAlign = "left";
+            cursorCtx.textBaseline = "bottom";
+
+            for (const ownerId in cursorLabels) {
+                const lbl = cursorLabels[ownerId];
+
+                const padding = 4;
+                const textWidth = cursorCtx.measureText(lbl.name).width;
+                const bgWidth = textWidth + padding * 2;
+                const bgHeight = 18;
+
+                cursorCtx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                cursorCtx.beginPath();
+                cursorCtx.roundRect(lbl.x, lbl.y - bgHeight, bgWidth, bgHeight, 4);
+                cursorCtx.fill();
+
+                cursorCtx.fillStyle = "#ffffff";
+                cursorCtx.fillText(lbl.name, lbl.x + padding, lbl.y - 3);
+            }
+
+            cursorCtx.restore();
         }
 
         function undo() {
+            ensureUser(user.id);
 
-        ensureUser(user.id);
+            if (userStrokes[user.id].length === 0) return;
 
-        if (userStrokes[user.id].length === 0) return;
+            const last = userStrokes[user.id].pop();
 
-        const last = userStrokes[user.id].pop();
+            userHistory[user.id].push(last);
 
-        userHistory[user.id].push(last);
+            isStrokesDirty = true;
+            requestRedraw();
 
-        redraw();
-
-        if (socket) {
-            socket.emit("user-undo", { owner: user.id });
-        }
-
+            if (socket) {
+                socket.emit("user-undo", { owner: user.id });
+            }
         }
 
         function redo() {
-
             ensureUser(user.id);
 
             if (userHistory[user.id].length === 0) return;
@@ -539,104 +737,36 @@
 
             userStrokes[user.id].push(next);
 
-            redraw();
+            isStrokesDirty = true;
+            requestRedraw();
 
             if (socket) {
                 socket.emit("user-redo", { owner: user.id });
             }
-
-        }
-
-        function redraw() {
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            const allStrokes = [];
-
-            for (const owner in userStrokes) {
-                for (const s of userStrokes[owner]) {
-                    allStrokes.push(s);
-                }
-            }
-
-            for (const owner in activeStrokes) {
-                allStrokes.push(activeStrokes[owner]);
-            }
-
-            allStrokes.sort(function(a, b) {
-                return (a.seq || 0) - (b.seq || 0);
-            });
-
-            for (const s of allStrokes) {
-
-                applyStrokeStyle(s);
-
-                for (const p of s.points) {
-
-                    ctx.beginPath();
-                    ctx.moveTo(p.x1, p.y1);
-                    ctx.lineTo(p.x2, p.y2);
-                    ctx.stroke();
-
-                }
-            }
-
-            ctx.globalCompositeOperation = "source-over";
-        }
-
-        function updateCursorLabel(owner, name, x, y) {
-
-            let label = cursorLabels[owner];
-
-            if (!label) {
-                label = document.createElement('div');
-                label.className = 'user-cursor-label';
-                document.body.appendChild(label);
-                cursorLabels[owner] = label;
-            }
-
-            label.textContent = name || 'Guest';
-
-            const liveRect = canvas.getBoundingClientRect();
-            const scaleX = liveRect.width / canvas.width;
-            const scaleY = liveRect.height / canvas.height;
-
-            label.style.left = (liveRect.left + x * scaleX) + "px";
-            label.style.top = (liveRect.top + y * scaleY) + "px";
-        }
-
-        function removeCursorLabel(owner) {
-            const label = cursorLabels[owner];
-            if (label) {
-                label.remove();
-                delete cursorLabels[owner];
-            }
         }
 
         function resetLocalState() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
             userStrokes = {};
-            userHistory = {};
             activeStrokes = {};
-            for (const owner in cursorLabels) {
-                removeCursorLabel(owner);
-            }
-            stroke = null;
-            isdrawing = false;
+            userHistory = {};
+            cursorLabels = {};
+            ensureUser(user.id);
+            isStrokesDirty = true;
+            requestRedraw();
         }
 
         function clearCanvas() {
             resetLocalState();
+
             if (socket) {
                 socket.emit("clear-canvas");
             }
         }
 
-
         canvas.addEventListener("pointerdown", start);
         canvas.addEventListener("pointermove", draw);
-        canvas.addEventListener("pointerup", stopp);
-        canvas.addEventListener("pointercancel", stopp);
+        canvas.addEventListener("pointerup", end);
+        canvas.addEventListener("pointercancel", end);
 
     </script>
 </body>
