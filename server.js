@@ -118,6 +118,11 @@ function generateRoomCode() {
     return code;
 }
 
+function ensureRoomUser(room, owner) {
+    if (!room.strokes[owner]) room.strokes[owner] = [];
+    if (!room.history[owner]) room.history[owner] = [];
+}
+
 function leaveRoom(user){
 
     if(!user.inRoom) return;
@@ -169,11 +174,24 @@ io.on("connection", (socket) => {
             `User ${userId} joined socket room ${roomCode}`
         );
 
+        const room = rooms.get(roomCode);
+        if (room) {
+            socket.emit("room-state", { strokes: room.strokes, history: room.history });
+        }
+
     });
 
     socket.on("stroke-finished", (stroke) => {
 
-        socket.to(socket.roomCode).emit("remote-stroke", stroke);
+        const room = rooms.get(socket.roomCode);
+        if (room && stroke.points && stroke.points.length > 0) {
+            stroke.seq = Date.now();
+            ensureRoomUser(room, stroke.owner);
+            room.strokes[stroke.owner].push(stroke);
+            room.history[stroke.owner] = [];
+        }
+
+        io.to(socket.roomCode).emit("remote-stroke", stroke);
 
     });
 
@@ -181,15 +199,40 @@ io.on("connection", (socket) => {
         socket.to(socket.roomCode).emit("remote-live-stroke", data);
     });
 
+    socket.on("live-segment", (data) => {
+        socket.to(socket.roomCode).emit("remote-live-segment", data);
+    });
+
     socket.on("user-undo", (data) => {
+        const room = rooms.get(socket.roomCode);
+        if (room) {
+            ensureRoomUser(room, data.owner);
+            if (room.strokes[data.owner].length > 0) {
+                const last = room.strokes[data.owner].pop();
+                room.history[data.owner].push(last);
+            }
+        }
         socket.to(socket.roomCode).emit("remote-user-undo", data);
     });
 
     socket.on("user-redo", (data) => {
+        const room = rooms.get(socket.roomCode);
+        if (room) {
+            ensureRoomUser(room, data.owner);
+            if (room.history[data.owner].length > 0) {
+                const next = room.history[data.owner].pop();
+                room.strokes[data.owner].push(next);
+            }
+        }
         socket.to(socket.roomCode).emit("remote-user-redo", data);
     });
 
     socket.on("clear-canvas", () => {
+        const room = rooms.get(socket.roomCode);
+        if (room) {
+            room.strokes = {};
+            room.history = {};
+        }
         socket.to(socket.roomCode).emit("remote-clear-canvas");
     });
 
@@ -345,7 +388,9 @@ app.post('/create-room', function(req, res) {
     rooms.set(roomCode, {
         code: roomCode,
         creator: user,
-        members: [user.username]
+        members: [user.username],
+        strokes: {},
+        history: {}
     })
     user.inRoom = true;
     user.roomCode = roomCode;
