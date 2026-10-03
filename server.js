@@ -36,7 +36,7 @@ db.run(query)
 // keyed by email. Nothing goes into SQLite until verification succeeds.
 let pendingSignups = {};
 
-const port = 3000;
+const port = process.env.PORT || 3000;
 let rooms = new Map();
 
 const server = http.createServer(app);
