@@ -5,7 +5,7 @@ require('dotenv').config();
 // Set TURSO_DATABASE_URL + TURSO_AUTH_TOKEN to point this at a hosted
 // Turso database instead -- no other code change needed.
 const client = createClient({
-    url: process.env.TURSO_DATABASE_URL || 'file:./doodlebuds.db',
+    url: process.env.TURSO_DATABASE_URL || 'file:./users.db',
     authToken: process.env.TURSO_AUTH_TOKEN || undefined
 });
 
