@@ -68,7 +68,7 @@ app.get('/', function(req , res) {
 });
 
 db.init().then(() => {
-    server.listen(port, '0.0.0.0' ()=> {
+    server.listen(port, '0.0.0.0', ()=> {
         console.log('ohh yeah!! listening on port 3000 !!')
     })
 }).catch((err) => {
