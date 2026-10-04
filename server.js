@@ -25,7 +25,7 @@ app.use(session({
 // keyed by email. Nothing goes into the database until verification succeeds.
 let pendingSignups = {};
 
-const port = process.env.PORT !! 3000;
+const port = process.env.PORT || 3000;
 
 // Fast in-memory cache of active rooms. The database (db.js) is the
 // durable source of truth; this Map just avoids round-tripping to the
