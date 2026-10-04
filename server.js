@@ -69,7 +69,7 @@ app.get('/', function(req , res) {
 });
 
 server.listen(port, '0.0.0.0', ()=> {
-    console.log('ohh yeah!! listening on port 3000 !!')
+    console.log('ohh yeah!! listening on port '+port+' !!')
 })
 
 // configure this with your real email + an app password (not your normal password)
