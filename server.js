@@ -3,10 +3,9 @@ const app = express();
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const sql = require('sqlite3');
 const session = require('express-session');
 const nodemailer = require('nodemailer');
-const db = new sql.Database('./users.db');
+const db = require('./db');
 require('dotenv').config();
 
 
@@ -21,23 +20,23 @@ app.use(session({
     cookie: { maxAge: 1000 * 60 * 60 * 24 } // 1 day
 }));
 
-let query = `
-    CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE,
-    email TEXT UNIQUE,
-    password TEXT
-    )`;
-
-db.run(query)
-
 
 // signups that haven't been verified yet live here in memory,
-// keyed by email. Nothing goes into SQLite until verification succeeds.
+// keyed by email. Nothing goes into the database until verification succeeds.
 let pendingSignups = {};
 
-const port = process.env.PORT || 3000;
+const port = 3000;
+
+// Fast in-memory cache of active rooms. The database (db.js) is the
+// durable source of truth; this Map just avoids round-tripping to the
+// DB on every draw event. If a room isn't cached (e.g. right after a
+// server restart), getOrLoadRoom() rehydrates it from the DB on demand.
 let rooms = new Map();
+
+// Grace window for socket disconnects (page refresh, brief network drop)
+// before we treat someone as having actually left the room.
+const DISCONNECT_GRACE_MS = 20000;
+let pendingDisconnects = new Map();
 
 const server = http.createServer(app);
 const io = new Server(server);
@@ -68,9 +67,14 @@ app.get('/', function(req , res) {
     res.sendFile(path.join(__dirname, 'auth.html'));
 });
 
-server.listen(port, '0.0.0.0', ()=> {
-    console.log('ohh yeah!! listening on port '+port+' !!')
-})
+db.init().then(() => {
+    server.listen(port, ()=> {
+        console.log('ohh yeah!! listening on port 3000 !!')
+    })
+}).catch((err) => {
+    console.log("Failed to initialize database:", err);
+    process.exit(1);
+});
 
 // configure this with your real email + an app password (not your normal password)
 const transporter = nodemailer.createTransport({
@@ -97,7 +101,7 @@ function sendVerificationCode(email, code) {
     });
 }
 
-function generateRoomCode() {
+async function generateRoomCode() {
     const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     const digits = "0123456789";
 
@@ -115,6 +119,13 @@ function generateRoomCode() {
         return generateRoomCode();
     }
 
+    // also check the database, in case a room exists there but hasn't
+    // been loaded into the in-memory cache yet (e.g. right after a restart)
+    const existing = await db.getRoom(code);
+    if (existing) {
+        return generateRoomCode();
+    }
+
     return code;
 }
 
@@ -123,27 +134,55 @@ function ensureRoomUser(room, owner) {
     if (!room.history[owner]) room.history[owner] = [];
 }
 
-function leaveRoom(user){
+// Loads a room into the in-memory cache from the database if it isn't
+// already cached. Returns null if the room doesn't exist anywhere.
+async function getOrLoadRoom(code) {
+    if (rooms.has(code)) return rooms.get(code);
 
-    if(!user.inRoom) return;
-    const room = rooms.get(user.roomCode);
+    const dbRoom = await db.getRoom(code);
+    if (!dbRoom) return null;
 
-    if(!room){
-        user.inRoom = false;
-        user.roomCode = null;
-        return;
-    }
+    const members = await db.getMembers(code);
+    const { strokes, history } = await db.getRoomState(code);
 
-    if(room.creator &&
-         room.creator.id === user.id){
+    const room = {
+        code,
+        creator: { id: dbRoom.creator_id, username: dbRoom.creator_username },
+        members,
+        strokes,
+        history
+    };
+
+    rooms.set(code, room);
+    return room;
+}
+
+// Shared cleanup used both when a user explicitly leaves (logout, solo,
+// creating/joining another room) and when a socket disconnect's grace
+// period expires without a reconnect.
+async function removeMemberFromRoom(roomCode, userId) {
+    const room = rooms.get(roomCode) || await getOrLoadRoom(roomCode);
+    if (!room) return;
+
+    if (room.creator && room.creator.id === userId && !room.creator.username.endsWith(" (left)")) {
         room.creator.username = room.creator.username + " (left)";
+        db.setCreatorUsername(roomCode, room.creator.username).catch(err => console.log("DB error:", err));
     }
 
-    room.members =room.members.filter(name => name !== user.username);
+    room.members = room.members.filter(m => m.id !== userId);
+    db.removeMember(roomCode, userId).catch(err => console.log("DB error:", err));
 
-    if(room.members.length === 0){
-        rooms.delete(user.roomCode);
+    if (room.members.length === 0) {
+        rooms.delete(roomCode);
+        db.deleteRoom(roomCode).catch(err => console.log("DB error:", err));
     }
+}
+
+async function leaveRoom(user){
+
+    if(!user || !user.inRoom) return;
+
+    await removeMemberFromRoom(user.roomCode, user.id);
 
     user.inRoom = false;
     user.roomCode = null;
@@ -159,11 +198,22 @@ io.on("connection", (socket) => {
 
         if (socket.roomCode && socket.userId) {
             socket.to(socket.roomCode).emit("remote-stroke", { owner: socket.userId, points: [] });
+
+            // don't immediately drop the user from the room -- a page
+            // refresh or brief network blip also fires "disconnect", and
+            // the client reconnects and re-joins within a second or two.
+            // Only finalize the leave if they don't come back in time.
+            const key = socket.roomCode + ":" + socket.userId;
+            const timer = setTimeout(() => {
+                pendingDisconnects.delete(key);
+                removeMemberFromRoom(socket.roomCode, socket.userId).catch(err => console.log("DB error:", err));
+            }, DISCONNECT_GRACE_MS);
+            pendingDisconnects.set(key, timer);
         }
 
     });
 
-    socket.on("join-room", ({ roomCode, userId }) => {
+    socket.on("join-room", async ({ roomCode, userId }) => {
 
         socket.join(roomCode);
 
@@ -174,7 +224,14 @@ io.on("connection", (socket) => {
             `User ${userId} joined socket room ${roomCode}`
         );
 
-        const room = rooms.get(roomCode);
+        // reconnecting to the same room cancels any pending "they left" cleanup
+        const key = roomCode + ":" + userId;
+        if (pendingDisconnects.has(key)) {
+            clearTimeout(pendingDisconnects.get(key));
+            pendingDisconnects.delete(key);
+        }
+
+        const room = await getOrLoadRoom(roomCode);
         if (room) {
             socket.emit("room-state", { strokes: room.strokes, history: room.history });
         }
@@ -189,6 +246,9 @@ io.on("connection", (socket) => {
             ensureRoomUser(room, stroke.owner);
             room.strokes[stroke.owner].push(stroke);
             room.history[stroke.owner] = [];
+
+            // persist in the background -- don't hold up the broadcast below
+            db.saveStroke({ ...stroke, roomCode: socket.roomCode }).catch(err => console.log("DB error:", err));
         }
 
         io.to(socket.roomCode).emit("remote-stroke", stroke);
@@ -210,6 +270,7 @@ io.on("connection", (socket) => {
             if (room.strokes[data.owner].length > 0) {
                 const last = room.strokes[data.owner].pop();
                 room.history[data.owner].push(last);
+                db.undoLastStroke(socket.roomCode, data.owner).catch(err => console.log("DB error:", err));
             }
         }
         socket.to(socket.roomCode).emit("remote-user-undo", data);
@@ -222,6 +283,7 @@ io.on("connection", (socket) => {
             if (room.history[data.owner].length > 0) {
                 const next = room.history[data.owner].pop();
                 room.strokes[data.owner].push(next);
+                db.redoLastStroke(socket.roomCode, data.owner).catch(err => console.log("DB error:", err));
             }
         }
         socket.to(socket.roomCode).emit("remote-user-redo", data);
@@ -232,13 +294,14 @@ io.on("connection", (socket) => {
         if (room) {
             room.strokes = {};
             room.history = {};
+            db.clearRoomStrokes(socket.roomCode).catch(err => console.log("DB error:", err));
         }
         socket.to(socket.roomCode).emit("remote-clear-canvas");
     });
 
 });
 
-app.post('/register',function(req, res) {
+app.post('/register', async function(req, res) {
     const { username, email, password } = req.body;
 
     if (!username || !email || !password) {
@@ -254,11 +317,8 @@ app.post('/register',function(req, res) {
         return res.json({ success: false, message: "Password must be at least 6 characters!", redirect: null });
     }
 
-    let query = `SELECT * FROM users WHERE email = ? OR username = ?`;
-    db.get(query, [email, username], function(err, existingUser) {
-        if (err) {
-            return res.json({ success: false, message: "Database Error!!", redirect: null });
-        }
+    try {
+        const existingUser = await db.getUserByEmailOrUsername(email, username);
         if (existingUser) {
             return res.json({ success: false, message: "Username or email already registered. Please login.", redirect: null });
         }
@@ -273,8 +333,9 @@ app.post('/register',function(req, res) {
         sendVerificationCode(email, code);
 
         res.json({ success: true, message: "Signup successful! Check your email for the verification code.", redirect: null });
-    })
-
+    } catch (err) {
+        return res.json({ success: false, message: "Database Error!!", redirect: null });
+    }
 }); 
 
 app.post('/resend-code', function(req, res) {
@@ -295,7 +356,7 @@ app.post('/resend-code', function(req, res) {
     res.json({ success: true, message: "Verification code resent!", redirect: null });
 });
 
-app.post('/verify', function(req, res) {
+app.post('/verify', async function(req, res) {
     const { email, code } = req.body;
 
     if (!email || !code) {
@@ -315,34 +376,31 @@ app.post('/verify', function(req, res) {
         return res.json({ success: false, message: "Invalid code!", redirect: null });
     }
 
-    let query = `INSERT INTO users (username, email, password) VALUES (?,?,?)`;
-    db.run(query, [pending.username, pending.email, pending.password], function(err) {
-        if (err) {
-            return res.json({ success: false, message: "User already exists or error occurred", redirect: null });
-        }
+    try {
+        const newId = await db.insertUser(pending.username, pending.email, pending.password);
 
         delete pendingSignups[email];
 
         // log the user in immediately, no need to visit /login after verifying
-        req.session.user = { id: this.lastID, username: pending.username, email: pending.email };
+        req.session.user = { id: newId, username: pending.username, email: pending.email, inRoom: false, roomCode: null };
 
         res.json({ success: true, message: "Verified!", redirect: "/main-menu.html" });
-    });
+    } catch (err) {
+        return res.json({ success: false, message: "User already exists or error occurred", redirect: null });
+    }
 });
 
 
-app.post('/login', function(req,res) {
+app.post('/login', async function(req,res) {
     const {email, password} = req.body;
 
     if (!email || !password) {
         return res.json({ success: false, message: "All fields are required!", redirect: null });
     }
 
-    let query = `SELECT * FROM users WHERE email = ?`;
-    db.get(query,[email], function(err,user){
-        if (err){
-            return res.json({ success: false, message: "Database Error!!", redirect: null })
-        }
+    try {
+        const user = await db.getUserByEmail(email);
+
         if(!user){
             return res.json({ success: false, message: "Email Not Found!!", redirect: null })
         }
@@ -353,9 +411,9 @@ app.post('/login', function(req,res) {
         req.session.user = { id: user.id, username: user.username, email: user.email, inRoom: false, roomCode: null };
 
         res.json({ success: true, message: "Login successful!", redirect: "/main-menu.html" })
-    })
-
-    
+    } catch (err) {
+        return res.json({ success: false, message: "Database Error!!", redirect: null })
+    }
 })
 
 // main-menu.html (or any future page) can call this to get the current user's data
@@ -366,8 +424,8 @@ app.get('/session-user', function(req, res) {
     res.json({ success: true, user: req.session.user });
 });
 
-app.post('/logout', function(req, res) {
-    leaveRoom(req.session.user);
+app.post('/logout', async function(req, res) {
+    await leaveRoom(req.session.user);
     req.session.destroy(function(err){
         if (err){
             return res.json({ success: false, message: "Could not log out" });
@@ -376,42 +434,52 @@ app.post('/logout', function(req, res) {
     });
 });
 
-app.post('/solo', function(req, res) {
-    leaveRoom(req.session.user);
+app.post('/solo', async function(req, res) {
+    await leaveRoom(req.session.user);
     res.json({ success: true, message: "Starting solo game", redirect: "/canvas.html" });
 })
 
-app.post('/create-room', function(req, res) {
-    leaveRoom(req.session.user);
-    const roomCode = generateRoomCode();
+app.post('/create-room', async function(req, res) {
+    await leaveRoom(req.session.user);
+    const roomCode = await generateRoomCode();
     let user = req.session.user;
+
+    const creator = { id: user.id, username: user.username };
     rooms.set(roomCode, {
         code: roomCode,
-        creator: user,
-        members: [user.username],
+        creator,
+        members: [{ id: user.id, username: user.username }],
         strokes: {},
         history: {}
     })
     user.inRoom = true;
     user.roomCode = roomCode;
+
+    db.createRoom(roomCode, creator).catch(err => console.log("DB error:", err));
+
     res.json({ success: true, message: "Creating room", redirect: "/canvas.html" });
 })
 
-app.post('/join-room', function(req, res) {
-    leaveRoom(req.session.user);
+app.post('/join-room', async function(req, res) {
+    await leaveRoom(req.session.user);
     const roomCode = req.body.code.toUpperCase();
 
-    if (rooms.has(roomCode)) {
-        let room = rooms.get(roomCode);
+    const room = await getOrLoadRoom(roomCode);
+
+    if (room) {
         let user = req.session.user;
-        if (!room.members.includes(user.username)) {
-            room.members.push(user.username);
+        if (!room.members.some(m => m.id === user.id)) {
+            room.members.push({ id: user.id, username: user.username });
         }
         user.inRoom = true;
         user.roomCode = roomCode;
         if(room.creator && room.creator.id === user.id){
             room.creator.username = room.creator.username.replace(" (left)", "");
+            db.setCreatorUsername(roomCode, room.creator.username).catch(err => console.log("DB error:", err));
         }
+
+        db.addMember(roomCode, user.id, user.username).catch(err => console.log("DB error:", err));
+
         return res.json({ success: true, message: "Joining room", redirect: "/canvas.html" }); 
     }
     else {
@@ -419,19 +487,20 @@ app.post('/join-room', function(req, res) {
     }
 })
 
-app.get('/session-room', function(req, res) {
+app.get('/session-room', async function(req, res) {
     if (!req.session.user || !req.session.user.inRoom) {
         return res.json({ success: false, message: "Not in a room" });
     }
 
     const code = req.session.user.roomCode;
+    const room = await getOrLoadRoom(code);
 
-    if (!rooms.has(code)) {
+    if (!room) {
         return res.json({ success: false, message: "Room not found" });
     }
 
     res.json({
         success: true,
-        room: rooms.get(code)
+        room: room
     });
 });
