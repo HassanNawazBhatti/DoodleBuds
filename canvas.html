@@ -65,6 +65,115 @@
             if (!data.success) return;
             
             socket = io();
+
+            socket.on("room-state", ({ strokes, history }) => {
+                for (const owner in strokes) {
+                    ensureUser(owner);
+                    userStrokes[owner] = strokes[owner];
+                }
+                for (const owner in history) {
+                    ensureUser(owner);
+                    userHistory[owner] = history[owner];
+                }
+                isStrokesDirty = true;
+                requestRedraw();
+            });
+
+            socket.on("remote-live-segment", (data) => {
+                ensureUser(data.owner);
+                if (!activeStrokes[data.owner]) {
+                    activeStrokes[data.owner] = {
+                        owner: data.owner,
+                        ownerName: data.ownerName,
+                        tool: data.tool,
+                        shape: data.shape || "freehand",
+                        color: data.color,
+                        size: data.size,
+                        seq: data.seq,
+                        points: []
+                    };
+                    isStrokesDirty = true;
+                }
+                activeStrokes[data.owner].points.push(data.point);
+
+                drawSegmentDirect(activeStrokes[data.owner], data.point);
+
+                const p = data.point;
+                updateCursorLabel(data.owner, data.ownerName, p.x2, p.y2);
+                refreshCursorLabels();
+            });
+
+            socket.on("remote-stroke", (stroke) => {
+
+                ensureUser(stroke.owner);
+
+                delete activeStrokes[stroke.owner];
+
+                removeCursorLabel(stroke.owner);
+
+                if (stroke.points && stroke.points.length > 0) {
+                    userStrokes[stroke.owner].push(stroke);
+                    userHistory[stroke.owner] = [];
+                }
+
+                isStrokesDirty = true;
+                requestRedraw();
+
+            });
+
+            socket.on("remote-live-stroke", (data) => {
+
+                activeStrokes[data.owner] = data;
+                isStrokesDirty = true;
+                requestRedraw();
+
+                if (data.points && data.points.length > 0) {
+                    const last = data.points[data.points.length - 1];
+                    updateCursorLabel(data.owner, data.ownerName, last.x2, last.y2);
+                }
+
+            });
+
+            socket.on("remote-user-undo", ({ owner }) => {
+
+                ensureUser(owner);
+
+                if (userStrokes[owner].length === 0) return;
+
+                const last = userStrokes[owner].pop();
+
+                userHistory[owner].push(last);
+
+                isStrokesDirty = true;
+                requestRedraw();
+
+            });
+
+            socket.on("remote-user-redo", ({ owner }) => {
+
+                ensureUser(owner);
+
+                if (userHistory[owner].length === 0) return;
+
+                const next = userHistory[owner].pop();
+
+                userStrokes[owner].push(next);
+
+                isStrokesDirty = true;
+                requestRedraw();
+
+            });
+
+            socket.on("remote-clear-canvas", () => {
+                resetLocalState();
+            });
+
+            // Fires on the initial connection AND every automatic reconnect
+            // (dropped wifi, laptop sleep, etc). Re-joining is safe to repeat --
+            // the server always answers with a fresh room-state, so this is
+            // what keeps the canvas in sync after a connectivity blip without
+            // needing a manual page refresh. Listeners are registered above,
+            // outside this handler, so reconnecting never double-registers them.
             socket.on("connect", () => {
 
                 console.log("Connected to server with socket ID:", socket.id);
@@ -72,108 +181,6 @@
                 socket.emit("join-room", {
                     roomCode: data.room.code,
                     userId: user.id
-                });
-
-                socket.on("room-state", ({ strokes, history }) => {
-                    for (const owner in strokes) {
-                        ensureUser(owner);
-                        userStrokes[owner] = strokes[owner];
-                    }
-                    for (const owner in history) {
-                        ensureUser(owner);
-                        userHistory[owner] = history[owner];
-                    }
-                    isStrokesDirty = true;
-                    requestRedraw();
-                });
-
-                socket.on("remote-live-segment", (data) => {
-                    ensureUser(data.owner);
-                    if (!activeStrokes[data.owner]) {
-                        activeStrokes[data.owner] = {
-                            owner: data.owner,
-                            ownerName: data.ownerName,
-                            tool: data.tool,
-                            shape: data.shape || "freehand",
-                            color: data.color,
-                            size: data.size,
-                            seq: data.seq,
-                            points: []
-                        };
-                        isStrokesDirty = true;
-                    }
-                    activeStrokes[data.owner].points.push(data.point);
-
-                    drawSegmentDirect(activeStrokes[data.owner], data.point);
-
-                    const p = data.point;
-                    updateCursorLabel(data.owner, data.ownerName, p.x2, p.y2);
-                    refreshCursorLabels();
-                });
-
-                socket.on("remote-stroke", (stroke) => {
-
-                    ensureUser(stroke.owner);
-
-                    delete activeStrokes[stroke.owner];
-
-                    removeCursorLabel(stroke.owner);
-
-                    if (stroke.points && stroke.points.length > 0) {
-                        userStrokes[stroke.owner].push(stroke);
-                        userHistory[stroke.owner] = [];
-                    }
-
-                    isStrokesDirty = true;
-                    requestRedraw();
-
-                });
-
-                socket.on("remote-live-stroke", (data) => {
-
-                    activeStrokes[data.owner] = data;
-                    isStrokesDirty = true;
-                    requestRedraw();
-
-                    if (data.points && data.points.length > 0) {
-                        const last = data.points[data.points.length - 1];
-                        updateCursorLabel(data.owner, data.ownerName, last.x2, last.y2);
-                    }
-
-                });
-
-                socket.on("remote-user-undo", ({ owner }) => {
-
-                    ensureUser(owner);
-
-                    if (userStrokes[owner].length === 0) return;
-
-                    const last = userStrokes[owner].pop();
-
-                    userHistory[owner].push(last);
-
-                    isStrokesDirty = true;
-                    requestRedraw();
-
-                });
-
-                socket.on("remote-user-redo", ({ owner }) => {
-
-                    ensureUser(owner);
-
-                    if (userHistory[owner].length === 0) return;
-
-                    const next = userHistory[owner].pop();
-
-                    userStrokes[owner].push(next);
-
-                    isStrokesDirty = true;
-                    requestRedraw();
-
-                });
-
-                socket.on("remote-clear-canvas", () => {
-                    resetLocalState();
                 });
 
             });
@@ -401,7 +408,12 @@
                 };
             }
 
+            // Give it a provisional seq immediately -- without this,
+            // buildSortedStrokes() treats it as seq 0 and sorts the live
+            // preview underneath every already-finished stroke until the
+            // server's authoritative seq arrives when the stroke finishes.
             stroke.seq = Date.now();
+
             activeStrokes[user.id] = stroke;
             isStrokesDirty = true;
 
@@ -465,8 +477,8 @@
                     tool: stroke.tool,
                     shape: stroke.shape,
                     color: stroke.color,
-                    seq: stroke.seq,
                     size: stroke.size,
+                    seq: stroke.seq,
                     point: segment
                 });
             }
@@ -581,11 +593,10 @@
 
             if (s.tool === "eraser") {
                 ctx.globalCompositeOperation = "destination-out";
-                ctx.strokeStyle = "rgba(0,0,0,1)";
                 ctx.lineWidth = s.size * ERASER_MULTIPLIER;
-                ctx.shadowColor = "transparent";
+                ctx.strokeStyle = "white";
                 ctx.shadowBlur = 0;
-            }  else if (s.tool === "neon") {
+            } else if (s.tool === "neon") {
                 ctx.globalCompositeOperation = "source-over";
                 ctx.strokeStyle = "white";
                 ctx.shadowColor = s.color;
