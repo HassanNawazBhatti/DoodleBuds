@@ -4,7 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 const session = require('express-session');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const db = require('./db');
 require('dotenv').config();
 
@@ -69,36 +69,39 @@ app.get('/', function(req , res) {
 
 db.init().then(() => {
     server.listen(port, '0.0.0.0', ()=> {
-        console.log('ohh yeah!! listening on port 3000 !!')
+        console.log('ohh yeah!! listening on port ' + port + ' !!')
     })
 }).catch((err) => {
     console.log("Failed to initialize database:", err);
     process.exit(1);
 });
 
-// configure this with your real email + an app password (not your normal password)
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.GMAIL,
-        pass: process.env.APP_KEY
-    }
-});
+//----------------- EMAIL -----------------
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function sendVerificationCode(email, code) {
-    transporter.sendMail({
-        from: process.env.GMAIL,
-        to: email,
+async function sendVerificationCode(email, code) {
+    const { data, error } = await resend.emails.send({
+        from: 'DoodleBuds <onboarding@resend.dev>',
+        to: [email],
         subject: 'DoodleBuds Verification Code',
-        text: `Your verification code is ${code}. It expires in 10 minutes.
-        Verify Your Account, and Start Doodlifying Your Day.`
-    }, function(err) {
-        if (err) console.log("Email error:", err);
+        text: `Your verification code is ${code}.
+
+It expires in 10 minutes.
+
+Verify Your Account and Start Doodlifying Your Day.`
     });
+
+    if (error) {
+        console.log("Email error:", error);
+        return false;
+    }
+
+    console.log("Verification email sent:", data);
+    return true;
 }
 
 async function generateRoomCode() {
@@ -307,20 +310,28 @@ app.post('/register', async function(req, res) {
     if (!username || !email || !password) {
         return res.json({ success: false, message: "All fields are required!", redirect: null });
     }
+
     if (username.length < 3) {
         return res.json({ success: false, message: "Username must be at least 3 characters!", redirect: null });
     }
+
     if (!isValidEmail(email)) {
         return res.json({ success: false, message: "Invalid email format!", redirect: null });
     }
+
     if (password.length < 6) {
         return res.json({ success: false, message: "Password must be at least 6 characters!", redirect: null });
     }
 
     try {
         const existingUser = await db.getUserByEmailOrUsername(email, username);
+
         if (existingUser) {
-            return res.json({ success: false, message: "Username or email already registered. Please login.", redirect: null });
+            return res.json({
+                success: false,
+                message: "Username or email already registered. Please login.",
+                redirect: null
+            });
         }
 
         const code = Math.floor(100000 + Math.random() * 900000).toString();
@@ -330,30 +341,66 @@ app.post('/register', async function(req, res) {
         // and pop the verification UI again instead of erroring out
         pendingSignups[email] = { username, email, password, code, expires };
 
-        sendVerificationCode(email, code);
+        const emailSent = await sendVerificationCode(email, code);
 
-        res.json({ success: true, message: "Signup successful! Check your email for the verification code.", redirect: null });
+        if (!emailSent) {
+            return res.json({
+                success: false,
+                message: "Unable to send verification email. Please try again.",
+                redirect: null
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Signup successful! Check your email for the verification code.",
+            redirect: null
+        });
+
     } catch (err) {
-        return res.json({ success: false, message: "Database Error!!", redirect: null });
-    }
-}); 
+        console.log("Registration error:", err);
 
-app.post('/resend-code', function(req, res) {
+        return res.json({
+            success: false,
+            message: "Registration error. Please try again.",
+            redirect: null
+        });
+    }
+});
+
+app.post('/resend-code', async function(req, res) {
     const { email } = req.body;
     const pending = pendingSignups[email];
 
     if (!pending) {
-        return res.json({ success: false, message: "No pending signup found. Please sign up again.", redirect: null });
+        return res.json({
+            success: false,
+            message: "No pending signup found. Please sign up again.",
+            redirect: null
+        });
     }
 
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = Date.now() + 10 * 60 * 1000;
+
     pending.code = code;
     pending.expires = expires;
 
-    sendVerificationCode(email, code);
+    const emailSent = await sendVerificationCode(email, code);
 
-    res.json({ success: true, message: "Verification code resent!", redirect: null });
+    if (!emailSent) {
+        return res.json({
+            success: false,
+            message: "Unable to resend verification email. Please try again.",
+            redirect: null
+        });
+    }
+
+    res.json({
+        success: true,
+        message: "Verification code resent!",
+        redirect: null
+    });
 });
 
 app.post('/verify', async function(req, res) {
